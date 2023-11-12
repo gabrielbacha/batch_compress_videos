@@ -284,9 +284,12 @@ def convert_video_handbrake(input_file):
 
 
 from PyQt5 import QtWidgets, QtCore
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeView, QPushButton
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeView, QPushButton, QFileDialog
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
+import os
+import json
+import os
 
 class MainWindow(QtWidgets.QMainWindow):
 
@@ -312,10 +315,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         
         #TODO add back dialog box
-        # path = self.get_directory_path()  # Use the dialog box to get the directory path
-        # if path is None:
-        #     # User cancelled the dialog box
-        #     return
+        path = self.get_directory_path()  # Use the dialog box to get the directory path
+        if path is None:
+            # User cancelled the dialog box
+            return
 
         self.model = QStandardItemModel()
         self.model.setHorizontalHeaderLabels(['Select', 'Name', 'Size', 'Rating'])
@@ -348,11 +351,30 @@ class MainWindow(QtWidgets.QMainWindow):
                 file_path = self.model.item(row, 1).text() # 1 is the index for 'Name' column
                 convert_video_handbrake(file_path)
 
+
     def get_directory_path(self):
+        # Get the path to the hidden file
+        home_dir = os.path.dirname(__file__)
+        hidden_file_path = os.path.join(home_dir, ".compress_vid_last_dir")
+
+        # Try to read the last used directory from the hidden file
+        try:
+            with open(hidden_file_path, "r") as f:
+                last_dir = f.read().strip()
+        except FileNotFoundError:
+            last_dir = None
+
+        # Open the file dialog and get the selected directory
         dialog = QFileDialog()
         dialog.setFileMode(QFileDialog.DirectoryOnly)
+        if last_dir:
+            dialog.setDirectory(last_dir)
         if dialog.exec_() == QFileDialog.Accepted:
-            return dialog.selectedFiles()[0]
+            selected_dir = dialog.selectedFiles()[0]
+            # Save the selected directory to the hidden file
+            with open(hidden_file_path, "w") as f:
+                f.write(selected_dir)
+            return selected_dir
         else:
             return None
 
