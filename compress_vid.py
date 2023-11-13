@@ -61,7 +61,11 @@ def get_video_info(input_path):
     print(" ".join(cmd))
 
     # Execute the ffprobe command
-    output = subprocess.check_output(cmd).decode('utf-8').strip().split('\n')
+    try:
+        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf-8').strip().split('\n')
+    except subprocess.CalledProcessError as e:
+        print(f"Error: {e.output.decode('utf-8')}")
+        output = ['h264', '1', '1', '1/1', '1', '1', '1']
 
     # Extracting the information from the output
     video_codec = output[0]
@@ -133,15 +137,19 @@ def get_video_info(input_path):
 
 # get_video_info(testfile)
 
-def get_export_bitrate(video_info):
+def get_export_bitrate(video_info, force_hq=False):
     # Use the get_video_info function to get video parameters
     print("Getting export settings...")
     dimensions = video_info['dimensions']
     fps = video_info['fps']
     codec = 'vt_h265'
+    video_bitrate = video_info['video_bitrate']
     rating_str = video_info['rating']
     # Default quality
     quality = 'LQ'
+    # Override quality if HQ is forced
+    if force_hq:
+        quality = 'HQ'
 
     # Attempt to convert the rating to an integer if it's numeric
     try:
@@ -161,16 +169,22 @@ def get_export_bitrate(video_info):
         resolution = '1080p'
 
     # Round fps to the nearest whole number to match against '30' or '60', 24 & 25 are considered 30
-    if fps <= 30:
+    if float(fps) <= 30:
         frame_rate = '30'
     else:
-        frame_rate = str(round(fps / 30) * 30)
+        frame_rate = str(round(float(fps) / 30) * 30)
 
     # Use resolution and frame rate to get the correct settings from the dictionary
-    export_settings = {
-        "new_bitrate": ffmpeg_settings.get(resolution, {}).get(str(frame_rate), {}).get(codec, {}).get(quality), 
-        "new_codec":list(ffmpeg_settings.get(resolution, {}).get(str(frame_rate)).keys())[0]
-        }
+    try:
+        export_settings = {
+            "new_bitrate": str(min(float(ffmpeg_settings.get(resolution, {}).get(str(frame_rate), {}).get(codec, {}).get(quality)), float(video_bitrate))),
+            "new_codec":list(ffmpeg_settings.get(resolution, {}).get(str(frame_rate)).keys())[0]
+            }
+    except:
+        export_settings = {
+            "new_bitrate": "1",
+            "new_codec": "vt_h265"
+            }
 
     return export_settings
 
@@ -207,7 +221,10 @@ def estimate_new_file_size(video_info, export_settings):
     new_file_size_mb = round(bitrate_to_size(duration_str, float(new_bitrate)),1)
 
     # Calculate compression ratio
-    compression_ratio = 1 - (new_file_size_mb / size_mb)
+    try:
+        compression_ratio = 1 - (new_file_size_mb / size_mb)
+    except:
+        compression_ratio = 0
 
     converted_file_data = {
         'new_file_size_mb': new_file_size_mb,
@@ -220,7 +237,7 @@ def estimate_new_file_size(video_info, export_settings):
 
 def parse_videos(input_path):
     print("Parsing videos in folder...")
-    extensions = ['.mp4', '.mkv', '.avi', 'mov']
+    extensions = ['.mp4', '.mkv', '.avi', '.mov']
     videos = [os.path.join(input_path, f) for f in os.listdir(input_path) if not f.startswith('.') and any(f.lower().endswith(ext) for ext in extensions)]
     return videos
 
@@ -256,8 +273,8 @@ def convert_video_handbrake(input_file, export_settings):
 
     # Execute the command
     print(" ".join(cmd))
-    # subprocess.run(cmd) #TODO
-    print(f'FAKE PROCESSED {input_file}')
+    subprocess.run(cmd) #TODO
+    # print(f'FAKE PROCESSED {input_file}')
     print(get_video_info(input_file))
     # print(get_video_info(output_file))
     return output_file
@@ -280,10 +297,48 @@ def set_new_rating(input_file, new_rating):
         # If an error occurs, print an error message
         print(f"Error: Could not set rating for {new_file_path}. Details: {e}")
 
+
+def old_file_new_name(input_path):
+    file_base, file_extension = os.path.splitext(input_path)
+    converted_file_name = f"{file_base}_OLD{file_extension}"
+    
+    return converted_file_name
+
+def rename_file(input_path, new_name):
+    try:
+        directory = os.path.dirname(input_path)
+        original_extension = os.path.splitext(input_path)[1]
+        new_name_without_extension = os.path.splitext(new_name)[0]
+        new_file_path = os.path.join(directory, new_name_without_extension + original_extension)
+        os.rename(input_path, new_file_path)
+        print(f"Renamed {os.path.basename(input_path)} to {os.path.basename(new_file_path)}")
+        return True
+    except Exception as e:
+        print(f"Failed to rename {os.path.basename(input_path)}: {e}")
+        return False
+
+
+def rename_with_rollback(original_file_path, intermediate_file_path, final_file_path):
+    # First, rename the original file to the intermediate path
+    if rename_file(original_file_path, intermediate_file_path):
+        # If the first rename succeeds, try the second rename
+        if rename_file(final_file_path, original_file_path):
+            return True
+        else:
+            # If the second rename fails, rollback the first rename
+            print("Second renaming operation failed, rolling back the first rename.")
+            rename_file(intermediate_file_path, original_file_path)
+    else:
+        print("First renaming operation failed.")
+    return False
+
+
+
+
 from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeView, QPushButton, QFileDialog, QMessageBox
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QStandardItemModel, QStandardItem
+from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor
 import os
 import json
 import os
@@ -307,6 +362,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tree.setHeaderHidden(False)
         self.tree.setAlternatingRowColors(True)
         self.tree.setUniformRowHeights(True)
+        self.tree.setSortingEnabled(True)  # Enable sorting
+
 
         ## Use dialog box to get directory path
         path = self.get_directory_path()  # Use the dialog box to get the directory path
@@ -322,8 +379,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tree.setModel(self.model)
         self.setCentralWidget(self.tree)
 
-        self.tree.expanded.connect(self.resize_columns)
-        self.tree.collapsed.connect(self.resize_columns)
+        self.tree.sortByColumn(1, Qt.AscendingOrder)
+
+        # self.tree.expanded.connect(self.resize_columns)
+        # self.tree.collapsed.connect(self.resize_columns)
+
+        # self.tree.setColumnWidth(1,300)
+        # self.tree.resizeColumnToContents(1)  # Adjust column index as per your column layout
+        for column in range(self.model.columnCount()):
+            self.tree.resizeColumnToContents(column)
 
         # Add a button to the window
         self.printButton = QPushButton("Convert selected videos", self)
@@ -353,17 +417,59 @@ class MainWindow(QtWidgets.QMainWindow):
         QtWidgets.QApplication.quit()
 
     def convert_video(self):
+        total_checked = sum(self.model.item(row, 0).checkState() == Qt.Checked for row in range(self.model.rowCount()))
+        current_checked = 0
+
         for row in range(self.model.rowCount()):
             check_item = self.model.item(row, 0)  # 0 is the index for 'Select' column
             if check_item.checkState() == Qt.Checked:
-                file_path = self.model.item(row, 15).text()
-                export_settings = {
-                "new_bitrate": self.model.item(row, 10).text(),
-                "new_codec": self.model.item(row, 9).text(),
+                current_checked += 1
+                file_name = self.model.item(row, 1).text()
+                print("=" * 80)
+                print("=" * 80)
+                print("=" * 80)
+                print("=" * 80)
+                print("=" * 80)
+                print("=" * 80)
+                print("=" * 80)
+                print("=" * 80)
+                print("=" * 80)
+                print(f"================Processing {file_name} - {current_checked}/{total_checked}================")
+                print("=" * 80)
+                print("=" * 80)
+                print("=" * 80)
+                print("=" * 80)
+                print("=" * 80)
+                print("=" * 80)
+                print("=" * 80)
+                print("=" * 80)
+                print("=" * 80)
+
+                old_file_path = self.model.item(row, 16).text()
+                renamed_old_file_path = self.model.item(row, 15).text()
+
+                video_info = {
+                    'video_codec': self.model.item(row, 7).text(),
+                    'dimensions': self.model.item(row, 5).text(),
+                    'video_bitrate': self.model.item(row, 8).text(),
+                    'fps': self.model.item(row, 6).text(),
+                    'duration_str': self.model.item(row, 4).text(),
+                    'size_mb': self.model.item(row, 9).text(),
+                    'rating': self.model.item(row, 2).text(),
                 }
+
+                force_hq = self.model.item(row, 3).checkState() == Qt.Checked  # Checking Force HQ checkbox
+                export_settings = get_export_bitrate(video_info, force_hq)
+                print(export_settings)
+
                 rating = self.model.item(row, 2).text()
-                new_file_path = convert_video_handbrake(file_path, export_settings)
+                new_file_path = convert_video_handbrake(old_file_path, export_settings)
                 set_new_rating(new_file_path, rating)
+                success = rename_with_rollback(old_file_path, renamed_old_file_path, new_file_path)
+                if success:
+                    print("Both renaming operations completed successfully.")
+                else:
+                    print("Renaming operations failed or partially failed.")
         # After conversion is done, show a confirmation dialog
         self.show_completion_dialog()
 
@@ -408,36 +514,47 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # Move the window to the center position
         self.move(center_position)
+
+
     
     def populate_tree(self, path):
         # Assuming get_export_bitrate and save_new_filename are defined 
         # and imported along with get_video_info and get_rating
         
         self.model.setHorizontalHeaderLabels([
-            'Select', 'Name', 'Rating', 'Duration', 'Dimensions', 'FPS',
-            'Codec', 'Bit Rate', 'Size (MB)', 'New Codec', 'Proposed Bit Rate',
-            'Est. New Size', 'Compression Ratio', 'Converted File Name', 'Renamed Old File Name', 'Full File Path'
+            'Select', 'Name', 'Rating', 'Force HQ', 'Duration', 'Dimensions', 'FPS',
+            'Codec', 'Bit Rate', 'Size (MB)', 'New Codec', 'New Bit Rate',
+            'Est. New Size', 'Compression %', 'Converted File Name', 'Renamed Old File Name', 'Full File Path'
         ])
 
-        for entry in parse_videos(path):
+        grey_brush = QBrush(QColor(128, 128, 128))  # Grey color
+        videos_list = parse_videos(path)
+        rows_to_grey_out = []  # List to keep track of rows to grey out
+
+        for entry in videos_list:
             video_info = get_video_info(entry)
             export_settings = get_export_bitrate(video_info)
             converted_file_data = estimate_new_file_size(video_info, export_settings)
             
             new_file_size = converted_file_data['new_file_size_mb']
             converted_file_name = save_new_filename(entry)
-            renamed_old_file_name = entry
+            renamed_old_file_name = old_file_new_name(entry)
 
             item_select = QStandardItem()
             item_select.setCheckable(True)
             item_select.setCheckState(Qt.Unchecked)
+
+            item_force_hq = QStandardItem()
+            item_force_hq.setCheckable(True)
+            item_force_hq.setCheckState(Qt.Unchecked)
 
             # Populate the row with all the necessary items
             row_items = [
                 item_select,
                 QStandardItem(os.path.basename(entry)), #filename
                 QStandardItem(str(video_info['rating'])), #rating
-                QStandardItem(video_info['duration_str']), #duration
+                item_force_hq, #force HQ
+                QStandardItem(video_info['duration_str'].split('.')[0]), #duration
                 QStandardItem(video_info['dimensions']), #dimensions
                 QStandardItem(str(video_info['fps'])), #fps
                 QStandardItem(video_info['video_codec']), #current codec
@@ -451,12 +568,43 @@ class MainWindow(QtWidgets.QMainWindow):
                 QStandardItem(renamed_old_file_name), #remaining file name
                 QStandardItem(entry),# os.path.basename(entry)), #full path
             ]
-            
+
             self.model.appendRow(row_items)
 
-    def resize_columns(self):
-        for column in range(self.model.columnCount()):
-            self.tree.resizeColumnToContents(column)
+            base_name = os.path.splitext(os.path.basename(entry))[0]
+            old_file_name = f"{base_name}_OLD"
+
+            if any(old_file_name in file for file in videos_list):
+                current_row = self.model.rowCount()
+                rows_to_grey_out.append((current_row - 1, old_file_name))
+
+        # Grey out the necessary rows
+        for row_index, old_file_name in rows_to_grey_out:
+            # Grey out the current file
+            for col in range(self.model.columnCount()):
+                self.model.item(row_index, col).setForeground(grey_brush)
+
+            # Grey out the _OLD file
+            for row in range(self.model.rowCount()):
+                if self.model.item(row, 1).text().startswith(old_file_name):
+                    for col in range(self.model.columnCount()):
+                        self.model.item(row, col).setForeground(grey_brush)
+
+            # if any(old_file_name in file for file in videos_list):
+            #     # Apply grey color to both the current file and the _OLD file
+            #     for col in range(self.model.columnCount()):
+            #         self.model.item(self.model.rowCount() - 1, col).setForeground(grey_brush)
+
+            #         # Find the row of the _OLD file and grey it out as well
+            #         for row in range(self.model.rowCount()):
+            #             if self.model.item(row, 1).text().startswith(old_file_name):
+            #                 for col in range(self.model.columnCount()):
+            #                     self.model.item(row, col).setForeground(grey_brush)
+
+
+    # def resize_columns(self):
+    #     for column in range(self.model.columnCount()):
+    #         self.tree.resizeColumnToContents(column)
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication([])
@@ -464,8 +612,3 @@ if __name__ == '__main__':
     window.center_on_screen()  # Center the window on the screen
     window.show()
     app.exec_()
-
-# # This will print out a list of all user-defined functions in the notebook
-# functions_list = [f for f in globals().values() if callable(f) and f.__module__ == '__main__']
-# for func in functions_list:
-#     print(func.__name__)
