@@ -1,3 +1,33 @@
+CHECK ALL THE LOGIC -- ADD PRINT DIALOG TO FOLLOW FLOWS TO MAKE SURE THAT EVERYTHING NOT BEING UNNECESSARILY REPEATED
+COPY RATING
+
+
+
+get_video_info(input_path)
+
+    video_info = {
+        'video_codec': video_codec,
+        'dimensions': dimensions,
+        'bitrate_mbps': bitrate_mbps,
+        'fps': fps,
+        'duration_str': duration_str,
+        'size_mb': size_mb
+        'rating': rating
+    }
+
+get_export_bitrate(video_info)
+
+    export_settings
+
+
+
+
+
+
+
+
+
+
 - Checkbox
 - --name
 - --rating

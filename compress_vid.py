@@ -45,16 +45,8 @@ ffmpeg_settings = {
     }
 }
 
-
-
-
-testfile="/Users/bachagabriel/Download/ALL_VIDEO_TESTS/VIDEO_TEST/DJI_0021.MP4"
-testdir="/Users/bachagabriel/Download/ALL_VIDEO_TESTS/VIDEO_TEST"
-
-###############
-
-
 def get_video_info(input_path):
+    ## FFPROBE INFO
     # ffprobe command to get video codec, dimensions, bitrate, fps, duration, and file size
     cmd = [
         'ffprobe',
@@ -65,6 +57,8 @@ def get_video_info(input_path):
         '-of', 'default=noprint_wrappers=1:nokey=1',
         input_path
     ]
+    print("Pulling video information...")
+    print(" ".join(cmd))
 
     # Execute the ffprobe command
     output = subprocess.check_output(cmd).decode('utf-8').strip().split('\n')
@@ -92,9 +86,9 @@ def get_video_info(input_path):
     dimensions = f"{width}x{height}"
 
     # Formatting bitrate as Mb/s if bitrate is available
-    bitrate_mbps = "N/A"
+    video_bitrate = "N/A"
     if bitrate and bitrate.isdigit():
-        bitrate_mbps = round(int(bitrate) / 1e6, 1)
+        video_bitrate = round(int(bitrate) / 1e6, 1)
 
     # Formatting file size as MB
     size_mb = round(int(file_size) / 1e6, 1)
@@ -102,24 +96,9 @@ def get_video_info(input_path):
     # Formatting duration as HH:MM:SS
     duration_str = str(datetime.timedelta(seconds=duration))
 
-     # Constructing the dictionary with the video information
-    video_info = {
-        'video_codec': video_codec,
-        'dimensions': dimensions,
-        'bitrate_mbps': bitrate_mbps,
-        'fps': fps,
-        'duration_str': duration_str,
-        'size_mb': size_mb
-    }
-
-    # Returning the constructed dictionary
-    return video_info
-
-# get_video_info(testfile)
-
-def get_rating(file_path):
+    ##RATING
     # Command to get the rating using exiftool
-    rating_cmd = ['exiftool', '-XMP:Rating', file_path]
+    rating_cmd = ['exiftool', '-XMP:Rating', input_path]
 
     # Run the command and capture the output
     completed_process = subprocess.run(rating_cmd, stdout=subprocess.PIPE, text=True)
@@ -133,24 +112,34 @@ def get_rating(file_path):
         # Split the output and get the last element, which should be the rating
         rating = output.split(':')[-1].strip()
 
-        return rating
     else:
         # Handle error if exiftool failed
         print("Error: exiftool did not complete successfully.")
         return None
 
+     # Constructing the dictionary with the video information
+    video_info = {
+        'video_codec': video_codec,
+        'dimensions': dimensions,
+        'video_bitrate': video_bitrate,
+        'fps': fps,
+        'duration_str': duration_str,
+        'size_mb': size_mb,
+        'rating': rating
+    }
 
+    # Returning the constructed dictionary
+    return video_info
 
-def get_export_bitrate(input_path):
-    global settings 
+# get_video_info(testfile)
 
+def get_export_bitrate(video_info):
     # Use the get_video_info function to get video parameters
-    video_info = get_video_info(input_path)
+    print("Getting export settings...")
     dimensions = video_info['dimensions']
     fps = video_info['fps']
     codec = 'vt_h265'
-    # Get the rating as a string
-    rating_str = get_rating(input_path)
+    rating_str = video_info['rating']
     # Default quality
     quality = 'LQ'
 
@@ -178,9 +167,12 @@ def get_export_bitrate(input_path):
         frame_rate = str(round(fps / 30) * 30)
 
     # Use resolution and frame rate to get the correct settings from the dictionary
-    settings = {"bitrate": ffmpeg_settings.get(resolution, {}).get(str(frame_rate), {}).get(codec, {}).get(quality), "codec":list(ffmpeg_settings.get(resolution, {}).get(str(frame_rate)).keys())[0]}
+    export_settings = {
+        "new_bitrate": ffmpeg_settings.get(resolution, {}).get(str(frame_rate), {}).get(codec, {}).get(quality), 
+        "new_codec":list(ffmpeg_settings.get(resolution, {}).get(str(frame_rate)).keys())[0]
+        }
 
-    return settings
+    return export_settings
 
 def bitrate_to_size(duration_str, bitrate_mbps):
     """
@@ -200,42 +192,37 @@ def bitrate_to_size(duration_str, bitrate_mbps):
     
     return round(file_size_mb, 2) if file_size_mb != "N/A" else file_size_mb
 
-def estimate_new_file_size(input_path): #TODO FIX THIS SHIT HERE, make sure it's just a estimate taking into account some inputs only not by reloading get video info
-    # Get video information
-    video_info = get_video_info(input_path)
+def estimate_new_file_size(video_info, export_settings):
+    print("Estimating new file size...")
 
-    bitrate_mbps = video_info['bitrate_mbps']
     duration_str = video_info['duration_str']
     size_mb = video_info['size_mb']
-
-    # Get export settings
-    new_bitrate = get_export_bitrate(input_path)['bitrate']
+    new_bitrate = export_settings['new_bitrate']
 
     # If no matching settings found, return "N/A"
     if not new_bitrate:
         return "N/A"
 
-    # Get bitrate from settings
-    bitrate_mbps = float(new_bitrate)
-
     # Estimate new file size
-    new_file_size_mb = round(bitrate_to_size(duration_str, bitrate_mbps),1)
+    new_file_size_mb = round(bitrate_to_size(duration_str, float(new_bitrate)),1)
 
     # Calculate compression ratio
     compression_ratio = 1 - (new_file_size_mb / size_mb)
 
-    return new_file_size_mb, bitrate_mbps, size_mb, f'{round(compression_ratio * 100, 1)}%'
+    converted_file_data = {
+        'new_file_size_mb': new_file_size_mb,
+        'new_bitrate': new_bitrate,
+        'size_mb': size_mb,
+        'compression_ratio': f'{round(compression_ratio * 100, 1)}%'
+    }
 
-# estimate_new_file_size(testfile)
-
+    return converted_file_data
 
 def parse_videos(input_path):
+    print("Parsing videos in folder...")
     extensions = ['.mp4', '.mkv', '.avi', 'mov']
-    videos = [os.path.join(input_path, f) for f in os.listdir(input_path) if any(f.lower().endswith(ext) for ext in extensions)]
+    videos = [os.path.join(input_path, f) for f in os.listdir(input_path) if not f.startswith('.') and any(f.lower().endswith(ext) for ext in extensions)]
     return videos
-
-# parse_videos(testdir)
-
 
 def save_new_filename(input_filedir):
     dir_name = os.path.dirname(input_filedir)
@@ -250,25 +237,21 @@ def save_new_filename(input_filedir):
         counter += 1
     return output_filedir
 
-# save_new_filename(testfile)
-
-def convert_video_handbrake(input_file):
+def convert_video_handbrake(input_file, export_settings):
+    print("Converting video...")
     output_file = save_new_filename(input_file)  ## to change to replace existing file name #TODO
-    estimate_new_file_size(input_file)  #TODO check if best way to get settings
     # Build the HandbrakeCLI command
     cmd = [
         'HandBrakeCLI',
         '-i', input_file,
         '-o', output_file,
-        '-e', str(settings['codec']),
-        '-b', str(float(settings['bitrate'])*1000),  # Average bitrate
+        '-e', export_settings['new_codec'],
+        '-b', str(float(export_settings['new_bitrate'])*1000),  # Average bitrate
         '-f', 'mp4',
         '--encopts', 'keyint=60',
         '--optimize',
         '--cfr',  # Constant frame rate
         '--keep-display-aspect',  # Maintain aspect ratio
-        # '--encoder-profile', settings['profile'],
-        # '--encoder-level', settings['level'],
     ]
 
     # Execute the command
@@ -277,14 +260,28 @@ def convert_video_handbrake(input_file):
     print(f'FAKE PROCESSED {input_file}')
     print(get_video_info(input_file))
     # print(get_video_info(output_file))
+    return output_file
 
+def set_new_rating(input_file, new_rating):
+    print("Setting new rating...")
+    # Build the exiftool command
+    try:
+        cmd = [
+            'exiftool',
+            '-overwrite_original',
+            '-XMP:Rating=' + str(new_rating),
+            input_file
+        ]
 
-
-
-
+        # Execute the command
+        print(" ".join(cmd))
+        subprocess.run(cmd)
+    except Exception as e:
+        # If an error occurs, print an error message
+        print(f"Error: Could not set rating for {new_file_path}. Details: {e}")
 
 from PyQt5 import QtWidgets, QtCore
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeView, QPushButton, QFileDialog
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeView, QPushButton, QFileDialog, QMessageBox
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
 import os
@@ -311,10 +308,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tree.setAlternatingRowColors(True)
         self.tree.setUniformRowHeights(True)
 
-        path = testdir
-
-        
-        #TODO add back dialog box
+        ## Use dialog box to get directory path
         path = self.get_directory_path()  # Use the dialog box to get the directory path
         if path is None:
             # User cancelled the dialog box
@@ -331,7 +325,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tree.expanded.connect(self.resize_columns)
         self.tree.collapsed.connect(self.resize_columns)
 
-                # Add a button to the window
+        # Add a button to the window
         self.printButton = QPushButton("Convert selected videos", self)
         self.printButton.clicked.connect(self.convert_video)
 
@@ -343,16 +337,38 @@ class MainWindow(QtWidgets.QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
+    def show_completion_dialog(self):
+        msgBox = QMessageBox()
+        msgBox.setIcon(QMessageBox.Information)
+        msgBox.setText("Video conversion completed.")
+        msgBox.setInformativeText("Do you want to close the application?")
+        msgBox.setStandardButtons(QMessageBox.Close)
+        msgBox.buttonClicked.connect(self.close_application)
+
+        returnValue = msgBox.exec()
+        if returnValue == QMessageBox.Close:
+            self.close_application()
+
+    def close_application(self):
+        QtWidgets.QApplication.quit()
 
     def convert_video(self):
         for row in range(self.model.rowCount()):
             check_item = self.model.item(row, 0)  # 0 is the index for 'Select' column
             if check_item.checkState() == Qt.Checked:
-                file_path = self.model.item(row, 1).text() # 1 is the index for 'Name' column
-                convert_video_handbrake(file_path)
-
+                file_path = self.model.item(row, 15).text()
+                export_settings = {
+                "new_bitrate": self.model.item(row, 10).text(),
+                "new_codec": self.model.item(row, 9).text(),
+                }
+                rating = self.model.item(row, 2).text()
+                new_file_path = convert_video_handbrake(file_path, export_settings)
+                set_new_rating(new_file_path, rating)
+        # After conversion is done, show a confirmation dialog
+        self.show_completion_dialog()
 
     def get_directory_path(self):
+        ##Logic to save the last used directory
         # Get the path to the hidden file
         home_dir = os.path.dirname(__file__)
         hidden_file_path = os.path.join(home_dir, ".compress_vid_last_dir")
@@ -400,23 +416,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.model.setHorizontalHeaderLabels([
             'Select', 'Name', 'Rating', 'Duration', 'Dimensions', 'FPS',
             'Codec', 'Bit Rate', 'Size (MB)', 'New Codec', 'Proposed Bit Rate',
-            'Est. New Size', 'Compression Ratio', 'Converted File Name', 'Renamed Old File Name'
+            'Est. New Size', 'Compression Ratio', 'Converted File Name', 'Renamed Old File Name', 'Full File Path'
         ])
 
         for entry in parse_videos(path):
-            converted_data = estimate_new_file_size(entry)
             video_info = get_video_info(entry)
-            rating = get_rating(entry)  # Ensure this returns a string, converting to int if it's a number
-            new_bit_rate = converted_data[1]
+            export_settings = get_export_bitrate(video_info)
+            converted_file_data = estimate_new_file_size(video_info, export_settings)
             
-
-            # Your logic for placeholders
-            estimated_new_file_size = converted_data[0]
-            compression_ratio = converted_data[3]
+            new_file_size = converted_file_data['new_file_size_mb']
             converted_file_name = save_new_filename(entry)
             renamed_old_file_name = entry
-
-            size_str = f"{video_info['size_mb']} MB"
 
             item_select = QStandardItem()
             item_select.setCheckable(True)
@@ -425,20 +435,21 @@ class MainWindow(QtWidgets.QMainWindow):
             # Populate the row with all the necessary items
             row_items = [
                 item_select,
-                QStandardItem(entry), #filename
-                QStandardItem(str(rating)), #rating
+                QStandardItem(os.path.basename(entry)), #filename
+                QStandardItem(str(video_info['rating'])), #rating
                 QStandardItem(video_info['duration_str']), #duration
                 QStandardItem(video_info['dimensions']), #dimensions
                 QStandardItem(str(video_info['fps'])), #fps
-                QStandardItem(video_info['video_codec']), #codec
-                QStandardItem(str(video_info['bitrate_mbps'])), #current bitrate
-                QStandardItem(size_str),
-                QStandardItem("vt_h265"),
-                QStandardItem(str(new_bit_rate)),
-                QStandardItem(str(f'{estimated_new_file_size} MB')),
-                QStandardItem(compression_ratio),
-                QStandardItem(converted_file_name),
-                QStandardItem(renamed_old_file_name),
+                QStandardItem(video_info['video_codec']), #current codec
+                QStandardItem(str(video_info['video_bitrate'])), #current bitrate
+                QStandardItem(f"{video_info['size_mb']} MB"), #current size
+                QStandardItem(export_settings['new_codec']), #new codec
+                QStandardItem(str(export_settings['new_bitrate'])), #new bitrate
+                QStandardItem(str(f'{new_file_size} MB')), #new size
+                QStandardItem(converted_file_data['compression_ratio']), #compression ratio
+                QStandardItem(converted_file_name), # new file name
+                QStandardItem(renamed_old_file_name), #remaining file name
+                QStandardItem(entry),# os.path.basename(entry)), #full path
             ]
             
             self.model.appendRow(row_items)
@@ -447,19 +458,12 @@ class MainWindow(QtWidgets.QMainWindow):
         for column in range(self.model.columnCount()):
             self.tree.resizeColumnToContents(column)
 
-
 if __name__ == '__main__':
     app = QtWidgets.QApplication([])
     window = MainWindow()
     window.center_on_screen()  # Center the window on the screen
     window.show()
     app.exec_()
-
-
-
-
-
-
 
 # # This will print out a list of all user-defined functions in the notebook
 # functions_list = [f for f in globals().values() if callable(f) and f.__module__ == '__main__']
