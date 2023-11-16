@@ -58,7 +58,7 @@ def get_video_info(input_path):
         input_path
     ]
     print("Pulling video information...")
-    print(" ".join(cmd))
+    # print(" ".join(cmd))
 
     # Execute the ffprobe command
     try:
@@ -383,7 +383,12 @@ def update_timestamp(original_file, new_file):
 
 def old_file_new_name(input_path):
     file_base, file_extension = os.path.splitext(input_path)
+    counter = 1
     converted_file_name = f"{file_base}_OLD{file_extension}"
+    # Check if the file exists and increment the counter until an unused name is found
+    while os.path.exists(converted_file_name):
+        converted_file_name = f"{file_base}_OLD {counter}{file_extension}"
+        counter += 1
     
     return converted_file_name
 
@@ -647,6 +652,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         for entry in videos_list:
             video_info = get_video_info(entry)
+            print(f'Processing {os.path.basename(entry)}')
             export_settings = get_export_bitrate(video_info)
             converted_file_data = estimate_new_file_size(video_info, export_settings)
             
