@@ -15,14 +15,27 @@ def prompt_and_calculate_video_sizes():
     root = tk.Tk()
     root.withdraw()  # Hides the root window
 
-    # Prompt the user to select a folder
-    input_path = filedialog.askdirectory()
+    input_path = filedialog.askdirectory()  # Allows selection of files and folders
+
+    # Check if a path was selected
     if not input_path:
-        print("No folder selected.")
+        print("No file or folder selected.")
         return
 
+    # If a file is selected, use its parent directory; otherwise, the path is already a folder
+    if os.path.isfile(input_path):
+        input_path = os.path.dirname(input_path)
+
+
     extensions = ['.mp4', '.mkv', '.avi', '.mov']
-    videos = [os.path.join(input_path, f) for f in os.listdir(input_path) if not f.startswith('.') and any(f.lower().endswith(ext) for ext in extensions)]
+    # videos = [os.path.join(input_path, f) for f in os.listdir(input_path) if not f.startswith('.') and any(f.lower().endswith(ext) for ext in extensions)]
+    videos = []
+
+    # Recursively walk through folder and subfolders
+    for root, dirs, files in os.walk(input_path):
+        for file in files:
+            if not file.startswith('.') and any(file.lower().endswith(ext) for ext in extensions):
+                videos.append(os.path.join(root, file))
 
 
     size_old = 0
@@ -40,9 +53,12 @@ def prompt_and_calculate_video_sizes():
                 size_old += os.path.getsize(video)
                 size_compressed += os.path.getsize(new_version)
                 count_converted += 1
-                compression_ration = f'{round((1-size_compressed/size_old) * 100, 1)}%'
-
-    print(f"{count_converted} files: from {format_size(size_old)} to {format_size(size_compressed)}, ({compression_ration} compression)")
+    
+    try:
+        compression_ratio = f'{round((1 - size_compressed / size_old) * 100, 1)}%' if size_old > 0 else "N/A"
+        print(f"{count_converted} files: from {format_size(size_old)} to {format_size(size_compressed)}, ({compression_ratio} compression)")
+    except ZeroDivisionError:
+        print("No converted videos found")
 
 # Call the function
 prompt_and_calculate_video_sizes()

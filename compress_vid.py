@@ -154,7 +154,7 @@ def get_export_bitrate(video_info, force_hq=False):
     # Attempt to convert the rating to an integer if it's numeric
     try:
         rating = int(rating_str)
-        if rating >= 4:
+        if rating >= 5:
             quality = 'HQ'
     except ValueError:
         # If it's not a number, keep the default quality
@@ -256,7 +256,7 @@ def save_new_filename(input_filedir):
 
 def convert_video_handbrake(input_file, export_settings):
     print("Converting video...")
-    output_file = save_new_filename(input_file)  ## to change to replace existing file name #TODO
+    output_file = save_new_filename(input_file)
     # Build the HandbrakeCLI command
     cmd = [
         'HandBrakeCLI',
@@ -270,32 +270,115 @@ def convert_video_handbrake(input_file, export_settings):
         '--cfr',  # Constant frame rate
         '--keep-display-aspect',  # Maintain aspect ratio
     ]
+    
+    ## Build the ffmpeg command
+    # cmd = [
+    #     'ffmpeg',
+    #     '-i', input_file,
+    #     '-c:v', "hevc_videotoolbox",
+    #     '-b:v', f"{float(export_settings['new_bitrate']) * 1000}k",  # Bitrate in kbps
+    #     '-f', 'mp4',
+    #     '-g', '60',  # Keyframe interval
+    #     '-vsync', 'cfr',  # Constant frame rate
+    #     '-map_metadata', '0',
+    #     output_file
+    # ]
+
 
     # Execute the command
     print(" ".join(cmd))
-    subprocess.run(cmd) #TODO
+    subprocess.run(cmd)
     # print(f'FAKE PROCESSED {input_file}')
-    print(get_video_info(input_file))
-    # print(get_video_info(output_file))
     return output_file
 
-def set_new_rating(input_file, new_rating):
-    print("Setting new rating...")
-    # Build the exiftool command
-    try:
-        cmd = [
-            'exiftool',
-            '-overwrite_original',
-            '-XMP:Rating=' + str(new_rating),
-            input_file
-        ]
+import subprocess
 
-        # Execute the command
-        print(" ".join(cmd))
-        subprocess.run(cmd)
-    except Exception as e:
-        # If an error occurs, print an error message
-        print(f"Error: Could not set rating for {new_file_path}. Details: {e}")
+def copy_exif_data(original_file, new_file):
+    # Keys to copy
+    keys = {
+        'XMP:Rating': 'Rating',
+        'XML:DeviceManufacturer': 'Make',
+        'XML:DeviceModelName': 'Model',
+        'XML:DeviceSerialNo': 'SerialNumber',
+        'QuickTime:CameraLensModel': 'LensModel',
+        'QuickTime:CameraFocalLength35mmEquivalent': 'FocalLengthIn35mmFilm',
+        'QuickTime:Make': 'Make',
+        'QuickTime:Model': 'Model',
+        'QuickTime:Software': 'Software',
+        'QuickTime:CreateDate': 'DateTimeOriginal',
+        'Composite:GPSAltitude': 'GPSAltitude',
+        'Composite:GPSAltitudeRef': 'GPSAltitudeRef',
+        'Composite:GPSLatitude': 'GPSLatitude',
+        'Composite:GPSLongitude': 'GPSLongitude',
+        'Composite:Rotation': 'Rotation'    
+    }
+
+    simplified_keys = {key.split(':')[1]: value for key, value in keys.items()}
+
+    # Read EXIF data from the original file
+    command_read = ['exiftool', '-json', original_file]
+    result = subprocess.run(command_read, capture_output=True, text=True)
+    exif_data = json.loads(result.stdout)[0]
+
+    print("Copying exif data...")
+
+    for full_key, simple_key in simplified_keys.items():
+        if full_key in exif_data:
+            value = exif_data[full_key]
+            if isinstance(value, str) and value.strip() == '':
+                continue  # Skip empty string values
+            # print(f'{full_key}:{value}:{simple_key}')
+            command_write = ['exiftool', "-P", "-overwrite_original", f'-{simple_key}={value}', new_file]
+            # print(" ".join(command_write)) 
+            result = subprocess.run(command_write, capture_output=True, text=True)
+
+            # Split the output into lines and get the first line
+            first_line = result.stdout.split('\n')[0]
+            if first_line == "    1 image files updated":
+                print(f"Successly changed {simple_key} to {value}")
+            else:
+                print(first_line)
+
+    print("Exif data copied.")
+    return exif_data
+
+def update_timestamp(original_file, new_file):
+    print(f"Updating timestamp for: {new_file}")
+
+    # Get the original creation time for comparison
+    read_create_date = subprocess.run(['stat', '-f', '%SB', original_file], capture_output=True, text=True)
+    # print(read_create_date.stdout.strip())
+    # Convert the birth time string to a datetime object
+    original_timestamp = datetime.datetime.strptime(read_create_date.stdout.strip(), "%b %d %H:%M:%S %Y")
+    print(f"Original file timestamp: {original_timestamp}")
+
+    # Try to get 'Create Date' from EXIF data
+    command = ['exiftool', '-CreateDate', '-d', '%Y:%m:%d %H:%M:%S', original_file]
+    result = subprocess.run(command, capture_output=True, text=True)
+    create_date_str = result.stdout.strip().split(': ')[-1]  # Extract the date part
+
+    if create_date_str:
+        # Parse the 'Create Date' string into a datetime object
+        try:
+            create_date = datetime.datetime.strptime(create_date_str, '%Y:%m:%d %H:%M:%S')
+            # Update the creation date using SetFile
+            formatted_date = create_date.strftime("%m/%d/%Y %H:%M:%S")
+            setfile_command = ['SetFile', '-d', formatted_date, new_file]
+            subprocess.run(setfile_command, check=True)
+            print(f"EXIF 'Create Date' set to: {formatted_date}")
+        except ValueError:
+            print("Invalid EXIF 'Create Date'. Using fallback method.")
+            # Fallback method using touch -r
+            touch_command = ['touch', '-r', original_file, new_file]
+            subprocess.run(touch_command, check=True)
+            print(f"Timestamp updated using touch -r from {original_file}")
+    else:
+        # Fallback to the original file's creation time using touch -r
+        touch_command = ['touch', '-r', original_file, new_file]
+        subprocess.run(touch_command, check=True)
+        print(f"EXIF 'Create Date' not found. Timestamp updated using touch -r from {original_file}")
+
+
 
 
 def old_file_new_name(input_path):
@@ -341,6 +424,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor
 import os
 import json
+import sys
 import os
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -381,11 +465,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.tree.sortByColumn(1, Qt.AscendingOrder)
 
-        # self.tree.expanded.connect(self.resize_columns)
-        # self.tree.collapsed.connect(self.resize_columns)
-
-        # self.tree.setColumnWidth(1,300)
-        # self.tree.resizeColumnToContents(1)  # Adjust column index as per your column layout
         for column in range(self.model.columnCount()):
             self.tree.resizeColumnToContents(column)
 
@@ -393,13 +472,47 @@ class MainWindow(QtWidgets.QMainWindow):
         self.printButton = QPushButton("Convert selected videos", self)
         self.printButton.clicked.connect(self.convert_video)
 
-        # Layout adjustments to include the button
+        # Add checkboxes for 'Select All'
+        self.selectAllCheckBox = QtWidgets.QCheckBox("Select All", self)
+        self.selectAllCheckBox.stateChanged.connect(self.selectAllChanged)
+        self.forceHQAllCheckBox = QtWidgets.QCheckBox("Force HQ All", self)
+        self.forceHQAllCheckBox.stateChanged.connect(self.forceHQAllChanged)
+
+        # Add 'Show in Finder' button
+        self.showInFinderButton = QtWidgets.QPushButton("Show in Finder", self)
+        self.showInFinderButton.clicked.connect(self.showInFinder)
+
+        # Layout adjustments to include the checkboxes
         layout = QtWidgets.QVBoxLayout()
-        layout.addWidget(self.tree)  # Assuming 'self.tree' is your QTreeView
+        layout.addWidget(self.selectAllCheckBox)
+        layout.addWidget(self.forceHQAllCheckBox)
+        layout.addWidget(self.tree)  # Your existing tree
         layout.addWidget(self.printButton)
+        layout.addWidget(self.showInFinderButton)
         container = QtWidgets.QWidget()
         container.setLayout(layout)
         self.setCentralWidget(container)
+
+    def selectAllChanged(self, state):
+        for row in range(self.model.rowCount()):
+            item = self.model.item(row, 0)  # 0 is the index for 'Select' column
+            item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
+
+    def forceHQAllChanged(self, state):
+        for row in range(self.model.rowCount()):
+            item = self.model.item(row, 3)  # 3 is the index for 'Force HQ' column
+            item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
+
+    def showInFinder(self):
+        # Logic to open the selected directory in Finder or File Explorer
+        directory = self.get_directory_path()  # Assuming this method returns the selected directory path
+        if directory:
+            if sys.platform == "darwin":
+                subprocess.run(["open", directory])
+            elif sys.platform == "win32":
+                subprocess.run(["explorer", directory])
+            else:  # Linux and other OS
+                subprocess.run(["xdg-open", directory])
 
     def show_completion_dialog(self):
         msgBox = QMessageBox()
@@ -462,9 +575,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 export_settings = get_export_bitrate(video_info, force_hq)
                 print(export_settings)
 
-                rating = self.model.item(row, 2).text()
                 new_file_path = convert_video_handbrake(old_file_path, export_settings)
-                set_new_rating(new_file_path, rating)
+                copy_exif_data(old_file_path, new_file_path)
+                update_timestamp(old_file_path, new_file_path)
+
                 success = rename_with_rollback(old_file_path, renamed_old_file_path, new_file_path)
                 if success:
                     print("Both renaming operations completed successfully.")
@@ -589,17 +703,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 if self.model.item(row, 1).text().startswith(old_file_name):
                     for col in range(self.model.columnCount()):
                         self.model.item(row, col).setForeground(grey_brush)
-
-            # if any(old_file_name in file for file in videos_list):
-            #     # Apply grey color to both the current file and the _OLD file
-            #     for col in range(self.model.columnCount()):
-            #         self.model.item(self.model.rowCount() - 1, col).setForeground(grey_brush)
-
-            #         # Find the row of the _OLD file and grey it out as well
-            #         for row in range(self.model.rowCount()):
-            #             if self.model.item(row, 1).text().startswith(old_file_name):
-            #                 for col in range(self.model.columnCount()):
-            #                     self.model.item(row, col).setForeground(grey_brush)
 
 
     # def resize_columns(self):

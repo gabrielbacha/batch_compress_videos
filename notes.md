@@ -92,3 +92,44 @@ which is     video_info = {
 
 
 
+
+
+
+
+
+
+dji
+
+
+File Modification Date/Time     : 2023:06:25 16:25:50+04:00
+File Access Date/Time           : 2023:11:16 12:16:27+04:00
+File Inode Change Date/Time     : 2023:11:16 12:16:29+04:00
+Create Date                     : 2023:06:25 14:24:23
+Modify Date                     : 2023:06:25 14:24:23
+Track Create Date               : 2023:06:25 14:24:23
+Track Modify Date               : 2023:06:25 14:24:23
+Media Create Date               : 2023:06:25 14:24:23
+Media Modify Date               : 2023:06:25 14:24:23
+
+
+
+apple
+
+Create Date                     : 2023:11:13 17:35:31
+Modify Date                     : 2023:11:13 17:35:40
+Track Create Date               : 2023:11:13 17:35:31
+Track Modify Date               : 2023:11:13 17:35:40
+Media Create Date               : 2023:11:13 17:35:31
+Media Modify Date               : 2023:11:13 17:35:40
+Creation Date                   : 2023:11:13 21:35:31+04:00
+
+
+sony
+Create Date                     : 2023:04:24 08:47:58
+Modify Date                     : 2023:04:24 08:47:58
+Track Create Date               : 2023:04:24 08:47:58
+Track Modify Date               : 2023:04:24 08:47:58
+Media Create Date               : 2023:04:24 08:47:58
+Media Modify Date               : 2023:04:24 08:47:58
+
+Creation Date Value             : 2023:04:24 17:47:58+09:00
