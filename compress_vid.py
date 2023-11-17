@@ -140,16 +140,19 @@ def get_video_info(input_path):
 def get_export_bitrate(video_info, force_hq=False):
     # Use the get_video_info function to get video parameters
     print("Getting export settings...")
-    dimensions = video_info['dimensions']
-    fps = video_info['fps']
-    codec = 'vt_h265'
-    video_bitrate = video_info['video_bitrate']
-    rating_str = video_info['rating']
-    # Default quality
-    quality = 'LQ'
-    # Override quality if HQ is forced
-    if force_hq:
-        quality = 'HQ'
+    try:
+        dimensions = video_info['dimensions']
+        fps = video_info['fps']
+        codec = 'vt_h265'
+        video_bitrate = video_info['video_bitrate']
+        rating_str = video_info['rating']
+        # Default quality
+        quality = 'LQ'
+        # Override quality if HQ is forced
+        if force_hq:
+            quality = 'HQ'
+    except:
+        pass
 
     # Attempt to convert the rating to an integer if it's numeric
     try:
@@ -695,15 +698,17 @@ class MainWindow(QtWidgets.QMainWindow):
     def close_application(self):
         QtWidgets.QApplication.quit()
 
-    def convert_video(self):
+    def get_total_checked_videos(self):
         total_checked = 0
         for folder_row in range(self.model.rowCount()):
             folder_item = self.model.item(folder_row)
             for video_row in range(folder_item.rowCount()):
-                check_item = folder_item.child(video_row, self.COL_SELECT)
-                if check_item and check_item.checkState() == Qt.Checked:
+                if self.is_video_selected(folder_item, video_row):
                     total_checked += 1
+        return total_checked
 
+    def convert_video(self):
+        total_checked = self.get_total_checked_videos()
         if total_checked == 0:
             QMessageBox.information(self, "No Videos Selected", "Please select videos to convert.")
             return
@@ -734,8 +739,8 @@ class MainWindow(QtWidgets.QMainWindow):
         return item.text() if item else ""
 
     def print_conversion_header(self, file_name, current, total):
-        header_line = "=" * 80
-        print(f"{header_line}\n{'=' * 29} Processing {file_name} - {current}/{total} {'=' * 29}\n{header_line}")
+        header_line = "=" * 100 + "\n"
+        print(f"{header_line *10}{'=' * 29} Processing {file_name} - {current}/{total} {'=' * 29}\n{header_line *10}")
 
     def process_video(self, folder_item, row):
         # Retrieve the full file path from the folder item and row index
