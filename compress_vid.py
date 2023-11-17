@@ -362,19 +362,20 @@ def copy_exif_data(original_file, new_file):
     return exif_data
 
 def update_timestamp(original_file, new_file):
-    print(f"Updating timestamp for: {new_file}")
+    print(f"Updating timestamp for: {os.path.basename(new_file)}")
 
     # Get the original creation time for comparison
     read_create_date = subprocess.run(['stat', '-f', '%SB', original_file], capture_output=True, text=True)
     # print(read_create_date.stdout.strip())
     # Convert the birth time string to a datetime object
     original_timestamp = datetime.datetime.strptime(read_create_date.stdout.strip(), "%b %d %H:%M:%S %Y")
-    print(f"Original file timestamp: {original_timestamp}")
+    print(f"Original (_OLD) file timestamp: {original_timestamp}")
 
     # Try to get 'Create Date' from EXIF data
     command = ['exiftool', '-CreateDate', '-d', '%Y:%m:%d %H:%M:%S', original_file]
     result = subprocess.run(command, capture_output=True, text=True)
     create_date_str = result.stdout.strip().split(': ')[-1]  # Extract the date part
+    print(f"{os.path.basename(original_file)} create date is {create_date_str}")
 
     if create_date_str:
         # Parse the 'Create Date' string into a datetime object
@@ -384,18 +385,18 @@ def update_timestamp(original_file, new_file):
             formatted_date = create_date.strftime("%m/%d/%Y %H:%M:%S")
             setfile_command = ['SetFile', '-d', formatted_date, new_file]
             subprocess.run(setfile_command, check=True)
-            print(f"EXIF 'Create Date' set to: {formatted_date}")
+            print(f"'Create Date' set to: {formatted_date} based on EXIF DATA")
         except ValueError:
             print("Invalid EXIF 'Create Date'. Using fallback method.")
             # Fallback method using touch -r
             touch_command = ['touch', '-r', original_file, new_file]
             subprocess.run(touch_command, check=True)
-            print(f"Timestamp updated using touch -r from {original_file}")
+            print(f"'Create Date' updated using touch -r from {original_file}")
     else:
         # Fallback to the original file's creation time using touch -r
         touch_command = ['touch', '-r', original_file, new_file]
         subprocess.run(touch_command, check=True)
-        print(f"EXIF 'Create Date' not found. Timestamp updated using touch -r from {original_file}")
+        print(f"EXIF data not found. 'Create Date' updated using touch -r from {original_file}")
 
 def old_file_new_name(input_path):
     file_base, file_extension = os.path.splitext(input_path)
