@@ -859,7 +859,10 @@ class MainWindow(QtWidgets.QMainWindow):
             folder_index = self.model.indexFromItem(folder_item)
             self.tree.expand(folder_index)  # Expands the folder row
 
+            video_counter = 0
             for video in videos:
+                video_counter += 1
+                print(f"Video {video_counter} / {len(videos)}")
                 video_row_items = self.create_video_row_items(video)
                 folder_item.appendRow(video_row_items)
     
