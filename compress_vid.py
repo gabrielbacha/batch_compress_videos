@@ -238,8 +238,13 @@ def estimate_new_file_size(video_info, export_settings):
 def parse_videos(input_path):
     print("Parsing videos in folder...")
     extensions = ['.mp4', '.mkv', '.avi', '.mov']
-    videos = [os.path.join(input_path, f) for f in os.listdir(input_path) if not f.startswith('.') and any(f.lower().endswith(ext) for ext in extensions)]
+    videos = []
+    for root, dirs, files in os.walk(input_path):
+        for f in files:
+            if not f.startswith('.') and any(f.lower().endswith(ext) for ext in extensions):
+                videos.append(os.path.join(root, f))
     return videos
+
 
 def save_new_filename(input_filedir):
     dir_name = os.path.dirname(input_filedir)
@@ -436,23 +441,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def __init__(self):
         super().__init__()
-
-        # Obtain the size of the screen
-        screen = QtWidgets.QApplication.primaryScreen().geometry()
-
-        # Calculate 80% of the screen width and convert to integer
-        width = int(screen.width() * 0.8)
-        height = int(screen.height() * 0.6)  # You can choose to keep the current height or set your own
-
-        # Set the window size with integer width and height
-        self.resize(width, height)
-
-        self.tree = QTreeView()
-        self.tree.setHeaderHidden(False)
-        self.tree.setAlternatingRowColors(True)
-        self.tree.setUniformRowHeights(True)
-        self.tree.setSortingEnabled(True)  # Enable sorting
-
+        
+        self.setup_tree()
+        self.setup_model()
+        self.resize_window()
 
         ## Use dialog box to get directory path
         path = self.get_directory_path()  # Use the dialog box to get the directory path
@@ -460,18 +452,13 @@ class MainWindow(QtWidgets.QMainWindow):
             # User cancelled the dialog box
             return
 
-        self.model = QStandardItemModel()
-        self.model.setHorizontalHeaderLabels(['Select', 'Name', 'Size', 'Rating'])
-
-        self.populate_tree(path)
-
-        self.tree.setModel(self.model)
+        
         self.setCentralWidget(self.tree)
 
         self.tree.sortByColumn(1, Qt.AscendingOrder)
 
-        for column in range(self.model.columnCount()):
-            self.tree.resizeColumnToContents(column)
+        self.populate_tree(path)
+
 
         # Add a button to the window
         self.printButton = QPushButton("Convert selected videos", self)
@@ -498,16 +485,98 @@ class MainWindow(QtWidgets.QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
+    
+    def setup_tree(self):
+        self.tree = QTreeView()
+        self.tree.setHeaderHidden(False)
+        self.tree.setAlternatingRowColors(True)
+        self.tree.setUniformRowHeights(True)
+        self.tree.setSortingEnabled(True)  # Enable sorting
+
+    def setup_model(self):
+        self.model = QStandardItemModel()
+        self.tree.setModel(self.model)
+
+    def get_directory_path(self):
+        ##Logic to save the last used directory
+        # Get the path to the hidden file
+        home_dir = os.path.dirname(__file__)
+        hidden_file_path = os.path.join(home_dir, ".compress_vid_last_dir")
+
+        # Try to read the last used directory from the hidden file
+        try:
+            with open(hidden_file_path, "r") as f:
+                last_dir = f.read().strip()
+        except FileNotFoundError:
+            last_dir = None
+
+        # Open the file dialog and get the selected directory
+        dialog = QFileDialog()
+        dialog.setFileMode(QFileDialog.DirectoryOnly)
+        if last_dir:
+            dialog.setDirectory(last_dir)
+        if dialog.exec_() == QFileDialog.Accepted:
+            selected_dir = dialog.selectedFiles()[0]
+            # Save the selected directory to the hidden file
+            with open(hidden_file_path, "w") as f:
+                f.write(selected_dir)
+            return selected_dir
+        else:
+            return None
+    
     def selectAllChanged(self, state):
         for row in range(self.model.rowCount()):
-            item = self.model.item(row, 0)  # 0 is the index for 'Select' column
-            item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
+            folder_item = self.model.item(row)
+            for child_row in range(folder_item.rowCount()):
+                item = folder_item.child(child_row, 0)  # 0 is the index for 'Select' column
+                if item is not None:
+                    item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
+
+
+    def resizeColumnsBasedOnVideos(self):
+        max_widths = [0] * self.model.columnCount()
+
+        for folder_row in range(self.model.rowCount()):
+            folder_item = self.model.item(folder_row)
+            for video_row in range(folder_item.rowCount()):
+                for column in range(self.model.columnCount()):
+                    video_item = folder_item.child(video_row, column)
+                    if video_item is not None:
+                        # Measure the width required for this item
+                        text = video_item.text()
+                        font_metrics = self.tree.fontMetrics()
+                        width = font_metrics.boundingRect(text).width()
+
+                        # Update the maximum width if necessary
+                        if width > max_widths[column]:
+                            max_widths[column] = width
+
+        # Resize each column to the maximum width found
+        for column, width in enumerate(max_widths):
+            self.tree.setColumnWidth(column, width + 10)  # Add a small buffer for padding
+
 
     def forceHQAllChanged(self, state):
         for row in range(self.model.rowCount()):
-            item = self.model.item(row, 3)  # 3 is the index for 'Force HQ' column
-            item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
+            folder_item = self.model.item(row)
+            for child_row in range(folder_item.rowCount()):
+                item = folder_item.child(child_row, 3)  # 3 is the index for 'Force HQ' column
+                if item is not None:
+                    item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
 
+
+    def resize_window(self):
+        # Obtain the size of the screen
+        screen = QtWidgets.QApplication.primaryScreen().geometry()
+
+        # Calculate 80% of the screen width and convert to integer
+        width = int(screen.width() * 0.8)
+        height = int(screen.height() * 0.6)  # You can choose to keep the current height or set your own
+
+        # Set the window size with integer width and height
+        self.resize(width, height)
+
+    
     def showInFinder(self):
         # Logic to open the selected directory in Finder or File Explorer
         directory = self.get_directory_path()  # Assuming this method returns the selected directory path
@@ -592,32 +661,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # After conversion is done, show a confirmation dialog
         self.show_completion_dialog()
 
-    def get_directory_path(self):
-        ##Logic to save the last used directory
-        # Get the path to the hidden file
-        home_dir = os.path.dirname(__file__)
-        hidden_file_path = os.path.join(home_dir, ".compress_vid_last_dir")
 
-        # Try to read the last used directory from the hidden file
-        try:
-            with open(hidden_file_path, "r") as f:
-                last_dir = f.read().strip()
-        except FileNotFoundError:
-            last_dir = None
-
-        # Open the file dialog and get the selected directory
-        dialog = QFileDialog()
-        dialog.setFileMode(QFileDialog.DirectoryOnly)
-        if last_dir:
-            dialog.setDirectory(last_dir)
-        if dialog.exec_() == QFileDialog.Accepted:
-            selected_dir = dialog.selectedFiles()[0]
-            # Save the selected directory to the hidden file
-            with open(hidden_file_path, "w") as f:
-                f.write(selected_dir)
-            return selected_dir
-        else:
-            return None
 
     def center_on_screen(self):
         # Get the screen resolution of your monitor
@@ -647,73 +691,72 @@ class MainWindow(QtWidgets.QMainWindow):
         ])
 
         grey_brush = QBrush(QColor(128, 128, 128))  # Grey color
+        folder_structure = {}
         videos_list = parse_videos(path)
         rows_to_grey_out = []  # List to keep track of rows to grey out
 
-        for entry in videos_list:
-            video_info = get_video_info(entry)
-            print(f'Processing {os.path.basename(entry)}')
-            export_settings = get_export_bitrate(video_info)
-            converted_file_data = estimate_new_file_size(video_info, export_settings)
-            
-            new_file_size = converted_file_data['new_file_size_mb']
-            converted_file_name = save_new_filename(entry)
-            renamed_old_file_name = old_file_new_name(entry)
+        for video_path in videos_list:
+            folder_path = os.path.dirname(video_path)
+            if folder_path not in folder_structure:
+                folder_structure[folder_path] = []
 
-            item_select = QStandardItem()
-            item_select.setCheckable(True)
-            item_select.setCheckState(Qt.Unchecked)
+            folder_structure[folder_path].append(video_path)
 
-            item_force_hq = QStandardItem()
-            item_force_hq.setCheckable(True)
-            item_force_hq.setCheckState(Qt.Unchecked)
+        for folder, videos in folder_structure.items():
+            folder_item = QStandardItem(os.path.basename(folder))
+            self.model.appendRow(folder_item)
+                
+            for video in videos:
+                video_info = get_video_info(video)
+                print(f'Processing {os.path.basename(video)}')
+                export_settings = get_export_bitrate(video_info)
+                converted_file_data = estimate_new_file_size(video_info, export_settings)
+                
+                new_file_size = converted_file_data['new_file_size_mb']
+                converted_file_name = save_new_filename(video)
+                renamed_old_file_name = old_file_new_name(video)
 
-            # Populate the row with all the necessary items
-            row_items = [
-                item_select,
-                QStandardItem(os.path.basename(entry)), #filename
-                QStandardItem(str(video_info['rating'])), #rating
-                item_force_hq, #force HQ
-                QStandardItem(video_info['duration_str'].split('.')[0]), #duration
-                QStandardItem(video_info['dimensions']), #dimensions
-                QStandardItem(str(video_info['fps'])), #fps
-                QStandardItem(video_info['video_codec']), #current codec
-                QStandardItem(str(video_info['video_bitrate'])), #current bitrate
-                QStandardItem(f"{video_info['size_mb']} MB"), #current size
-                QStandardItem(export_settings['new_codec']), #new codec
-                QStandardItem(str(export_settings['new_bitrate'])), #new bitrate
-                QStandardItem(str(f'{new_file_size} MB')), #new size
-                QStandardItem(converted_file_data['compression_ratio']), #compression ratio
-                QStandardItem(converted_file_name), # new file name
-                QStandardItem(renamed_old_file_name), #remaining file name
-                QStandardItem(entry),# os.path.basename(entry)), #full path
-            ]
+                item_select = QStandardItem()
+                item_select.setCheckable(True)
+                item_select.setCheckState(Qt.Unchecked)
 
-            self.model.appendRow(row_items)
+                item_force_hq = QStandardItem()
+                item_force_hq.setCheckable(True)
+                item_force_hq.setCheckState(Qt.Unchecked)
 
-            base_name = os.path.splitext(os.path.basename(entry))[0]
-            old_file_name = f"{base_name}_OLD"
+                # Populate the row with all the necessary items
+                video_row_items = [
+                    item_select,
+                    QStandardItem(os.path.basename(video)), #filename
+                    QStandardItem(str(video_info['rating'])), #rating
+                    item_force_hq, #force HQ
+                    QStandardItem(video_info['duration_str'].split('.')[0]), #duration
+                    QStandardItem(video_info['dimensions']), #dimensions
+                    QStandardItem(str(video_info['fps'])), #fps
+                    QStandardItem(video_info['video_codec']), #current codec
+                    QStandardItem(str(video_info['video_bitrate'])), #current bitrate
+                    QStandardItem(f"{video_info['size_mb']} MB"), #current size
+                    QStandardItem(export_settings['new_codec']), #new codec
+                    QStandardItem(str(export_settings['new_bitrate'])), #new bitrate
+                    QStandardItem(str(f'{new_file_size} MB')), #new size
+                    QStandardItem(converted_file_data['compression_ratio']), #compression ratio
+                    QStandardItem(converted_file_name), # new file name
+                    QStandardItem(renamed_old_file_name), #remaining file name
+                    QStandardItem(video),# os.path.basename(video)), #full path
+                ]
 
-            if any(old_file_name in file for file in videos_list):
-                current_row = self.model.rowCount()
-                rows_to_grey_out.append((current_row - 1, old_file_name))
+                folder_item.appendRow(video_row_items)
 
-        # Grey out the necessary rows
-        for row_index, old_file_name in rows_to_grey_out:
-            # Grey out the current file
-            for col in range(self.model.columnCount()):
-                self.model.item(row_index, col).setForeground(grey_brush)
+                self.resizeColumnsBasedOnVideos
 
-            # Grey out the _OLD file
-            for row in range(self.model.rowCount()):
-                if self.model.item(row, 1).text().startswith(old_file_name):
-                    for col in range(self.model.columnCount()):
-                        self.model.item(row, col).setForeground(grey_brush)
+                base_name = os.path.splitext(os.path.basename(video))[0]
+                old_file_name = f"{base_name}_OLD"
+
+                if any(old_file_name in file for file in videos_list):
+                    current_row = self.model.rowCount()
+                    rows_to_grey_out.append((current_row - 1, old_file_name))
 
 
-    # def resize_columns(self):
-    #     for column in range(self.model.columnCount()):
-    #         self.tree.resizeColumnToContents(column)
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication([])
@@ -721,3 +764,29 @@ if __name__ == '__main__':
     window.center_on_screen()  # Center the window on the screen
     window.show()
     app.exec_()
+
+
+
+
+
+            # # Grey out the necessary rows
+            # for row_index, old_file_name in rows_to_grey_out:
+            #     # Grey out the current file
+            #     for col in range(self.model.columnCount()):
+            #         item = self.model.item(row_index, col)
+            #         if item:  # Check if the item exists
+            #             item.setForeground(grey_brush)
+
+            #     # Grey out the _OLD file
+            #     for row in range(self.model.rowCount()):
+            #         item = self.model.item(row, 1)
+            #         if item and item.text().startswith(old_file_name):  # Check if the item exists and then check its text
+            #             for col in range(self.model.columnCount()):
+            #                 item = self.model.item(row, col)
+            #                 if item:  # Check if the item exists
+            #                     item.setForeground(grey_brush)
+
+
+    # def resize_columns(self):
+    #     for column in range(self.model.columnCount()):
+    #         self.tree.resizeColumnToContents(column)
