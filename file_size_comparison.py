@@ -15,7 +15,22 @@ def prompt_and_calculate_video_sizes():
     root = tk.Tk()
     root.withdraw()  # Hides the root window
 
-    input_path = filedialog.askdirectory()  # Allows selection of files and folders
+    try:
+        hidden_file_path = os.path.join(".compress_vid_last_dir")
+        with open(hidden_file_path, 'r') as file:
+            initial_dir = file.read().strip()
+    except FileNotFoundError:
+        # Handle the case when the file doesn't exist or is empty
+        initial_dir = None
+
+    # Use the initial directory as a default if it exists, otherwise use the current directory
+    if initial_dir:
+        input_path = filedialog.askdirectory(initialdir=initial_dir)
+    else:
+        input_path = filedialog.askdirectory()
+
+    with open(hidden_file_path, "w") as f:
+        f.write(input_path)
 
     # Check if a path was selected
     if not input_path:
@@ -56,9 +71,21 @@ def prompt_and_calculate_video_sizes():
     
     try:
         compression_ratio = f'{round((1 - size_compressed / size_old) * 100, 1)}%' if size_old > 0 else "N/A"
-        print(f"{count_converted} files: from {format_size(size_old)} to {format_size(size_compressed)}, ({compression_ratio} compression)")
+        print(f"{count_converted} files: from {format_size(size_old)} to {format_size(size_compressed)}, ({format_size(size_old-size_compressed)} saved / {compression_ratio} compression)")
     except ZeroDivisionError:
         print("No converted videos found")
+
+    # Ask if the user wants to delete _OLD files
+    delete_option = input("Do you want to delete the '_OLD' files? (y/n): ").strip().lower()
+    if delete_option == "y":
+        count=0
+        for video in videos:
+            if "_OLD" in video:
+                os.remove(video)
+                count+=1
+        print(f"Deleted {count} '_OLD' files.")
+    else:
+        print("No files were deleted.")
 
 # Call the function
 prompt_and_calculate_video_sizes()
