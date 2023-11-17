@@ -498,6 +498,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.forceHQAllCheckBox = QtWidgets.QCheckBox("Force HQ All", self)
         self.forceHQAllCheckBox.stateChanged.connect(self.forceHQAllChanged)
 
+        self.deleteConvertedVideosCheckBox = QtWidgets.QCheckBox("Delete Converted Videos", self)
+        self.deleteConvertedVideosCheckBox.stateChanged.connect(self.deleteConvertedVideosChanged)
+        self.delete_converted_videos = False
+
         self.showInFinderButton = QtWidgets.QPushButton("Show in Finder", self)
         self.showInFinderButton.clicked.connect(self.showInFinder)
 
@@ -505,6 +509,7 @@ class MainWindow(QtWidgets.QMainWindow):
         layout = QtWidgets.QVBoxLayout()
         layout.addWidget(self.selectAllCheckBox)
         layout.addWidget(self.forceHQAllCheckBox)
+        layout.addWidget(self.deleteConvertedVideosCheckBox)
         layout.addWidget(self.tree)
         layout.addWidget(self.printButton)
         layout.addWidget(self.showInFinderButton)
@@ -573,6 +578,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 item = folder_item.child(child_row, self.COL_FORCE_HQ)  # 3 is the index for 'Force HQ' column
                 if item is not None and item.isCheckable():
                     item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
+
+    def deleteConvertedVideosChanged(self, state):
+        self.delete_converted_videos = state == Qt.Checked
 
     def select_all_for_folder(self, folder_item, state):
         for row in range(folder_item.rowCount()):
@@ -682,6 +690,18 @@ class MainWindow(QtWidgets.QMainWindow):
         success = rename_with_rollback(old_file_path, renamed_old_file_path, new_file_path)
         print("Renaming operations completed successfully." if success else "Renaming operations failed or partially failed.")
 
+        if self.delete_converted_videos:
+            self.delete_original_file(renamed_old_file_path)
+            print(f"Deleted original file: {renamed_old_file_path}")
+
+    def delete_original_file(self, file_path):
+        try:
+            os.remove(file_path)
+        except OSError as e:
+            print(f"Error deleting file {file_path}: {e.strerror}")
+
+
+    
     def extract_video_info(self, folder_item, row):
         return {
             'video_codec': self.get_item_text(folder_item, row, self.COL_CODEC),
