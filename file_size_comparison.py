@@ -15,8 +15,10 @@ def prompt_and_calculate_video_sizes():
     root = tk.Tk()
     root.withdraw()  # Hides the root window
 
+    home_dir = os.path.dirname(__file__)
+    
     try:
-        hidden_file_path = os.path.join(".compress_vid_last_dir")
+        hidden_file_path = os.path.join(home_dir, ".compress_vid_last_dir")
         with open(hidden_file_path, 'r') as file:
             initial_dir = file.read().strip()
     except FileNotFoundError:

@@ -34,22 +34,34 @@ def copy_exif_data(original_file, new_file):
 
     print("Copying exif data...")
 
+    updated_keys_values = []
+    
+    command_write = ['exiftool', '-P', '-overwrite_original']
+
     for full_key, simple_key in simplified_keys.items():
         if full_key in exif_data:
             value = exif_data[full_key]
             if isinstance(value, str) and value.strip() == '':
                 continue  # Skip empty string values
             # print(f'{full_key}:{value}:{simple_key}')
-            command_write = ['exiftool', "-P", "-overwrite_original", f'-{simple_key}={value}', new_file]
-            # print(" ".join(command_write)) 
-            result = subprocess.run(command_write, capture_output=True, text=True)
+            command_write.append(f'-{simple_key}={value}')
+            updated_keys_values.append((simple_key, value))
 
-            # Split the output into lines and get the first line
-            first_line = result.stdout.split('\n')[0]
-            if first_line == "    1 image files updated":
-                print(f"Successly changed {simple_key} to {value}")
-            else:
-                print(first_line)
+
+    command_write.append(new_file)
+    # print(" ".join(command_write)) 
+    result = subprocess.run(command_write, capture_output=True, text=True)
+
+    # Check the first line of the output to determine if the file was updated
+    first_line = result.stdout.split('\n')[0] if result.stdout else ''
+    if "1 image files updated" in first_line:
+        print("The following keys and values have been updated:")
+        for key, value in updated_keys_values:
+            print(f'Updated {key} to {value}')
+    else:
+        print("No updates were made.")
+        if result.stderr:
+            print("Error:", result.stderr)
 
     print("Exif data copied.")
     return exif_data
@@ -68,7 +80,7 @@ def update_timestamp(original_file, new_file):
     command = ['exiftool', '-CreateDate', '-d', '%Y:%m:%d %H:%M:%S', original_file]
     result = subprocess.run(command, capture_output=True, text=True)
     create_date_str = result.stdout.strip().split(': ')[-1]  # Extract the date part
-    print(f"======={original_file} create date is {create_date_str}")
+    print(f"======={os.path.basename(original_file)} create date is {create_date_str}")
 
     if create_date_str:
         # Parse the 'Create Date' string into a datetime object
@@ -119,9 +131,11 @@ def prompt_and_copy_exif():
     # Set up the tkinter root window
     root = tk.Tk()
     root.withdraw()  # Hides the root window
+
+    home_dir = os.path.dirname(__file__)
     
     try:
-        hidden_file_path = os.path.join(".compress_vid_last_dir")
+        hidden_file_path = os.path.join(home_dir, ".compress_vid_last_dir")
         with open(hidden_file_path, 'r') as file:
             initial_dir = file.read().strip()
     except FileNotFoundError:
