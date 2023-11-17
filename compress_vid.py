@@ -143,7 +143,7 @@ def get_export_bitrate(video_info, force_hq=False):
     try:
         dimensions = video_info['dimensions']
         fps = video_info['fps']
-        codec = 'vt_h265'
+        codec = 'vt_h265' #Pulling h265 no matter what #TODO
         video_bitrate = video_info['video_bitrate']
         rating_str = video_info['rating']
         # Default quality
@@ -188,7 +188,7 @@ def get_export_bitrate(video_info, force_hq=False):
             "new_bitrate": "1",
             "new_codec": "vt_h265"
             }
-
+    #new codec no-longer needed, defined in convert_selected_video
     return export_settings
 
 def bitrate_to_size(duration_str, bitrate_mbps):
@@ -261,44 +261,56 @@ def save_new_filename(input_filedir):
         counter += 1
     return output_filedir
 
-def convert_video_handbrake(input_file, export_settings):
+def convert_selected_video(input_file, export_settings, use_ffmpeg=False, use_codec='mac'):
     print("Converting video...")
     output_file = save_new_filename(input_file)
-    # Build the HandbrakeCLI command
-    cmd = [
-        'HandBrakeCLI',
-        '-i', input_file,
-        '-o', output_file,
-        '-e', export_settings['new_codec'],
-        '-b', str(float(export_settings['new_bitrate'])*1000),  # Average bitrate
-        '-f', 'mp4',
-        '--encopts', 'keyint=60',
-        '--optimize',
-        '--cfr',  # Constant frame rate
-        '--keep-display-aspect',  # Maintain aspect ratio
-    ]
-    
-    ## Build the ffmpeg command
-    # cmd = [
-    #     'ffmpeg',
-    #     '-i', input_file,
-    #     '-c:v', "hevc_videotoolbox",
-    #     '-b:v', f"{float(export_settings['new_bitrate']) * 1000}k",  # Bitrate in kbps
-    #     '-f', 'mp4',
-    #     '-g', '60',  # Keyframe interval
-    #     '-vsync', 'cfr',  # Constant frame rate
-    #     '-map_metadata', '0',
-    #     output_file
-    # ]
 
+    # Define encoder settings based on the use_codec argument
+    if use_codec == 'mac':
+        encoder_handbrake = 'vt_h265'
+        encoder_ffmpeg = 'hevc_videotoolbox'
+    elif use_codec == 'nvidia':
+        encoder_handbrake = 'nvenc_h265'
+        encoder_ffmpeg = 'hevc_nvenc'
+    elif use_codec == 'plain':
+        encoder_handbrake = 'x265'
+        encoder_ffmpeg = 'libx265'
+    else:
+        raise ValueError("Invalid codec option. Choose 'mac', 'nvidia', or 'plain'.")
+
+    if use_ffmpeg:
+        # Build the FFmpeg command
+        cmd = [
+            'ffmpeg',
+            '-i', input_file,
+            '-c:v', encoder_ffmpeg,
+            '-b:v', f"{float(export_settings['new_bitrate']) * 1000}k",  # Bitrate in kbps
+            '-f', 'mp4',
+            '-g', '60',  # Keyframe interval
+            '-vsync', 'cfr',  # Constant frame rate
+            '-map_metadata', '0',
+            output_file
+        ]
+    else:
+        # Build the HandbrakeCLI command
+        cmd = [
+            'HandBrakeCLI',
+            '-i', input_file,
+            '-o', output_file,
+            '-e', encoder_handbrake,
+            '-b', str(float(export_settings['new_bitrate'])*1000),  # Average bitrate
+            '-f', 'mp4',
+            '--encopts', 'keyint=60',
+            '--optimize',
+            '--cfr',  # Constant frame rate
+            '--keep-display-aspect',  # Maintain aspect ratio
+        ]
 
     # Execute the command
     print(" ".join(cmd))
     subprocess.run(cmd)
-    # print(f'FAKE PROCESSED {input_file}')
     return output_file
 
-import subprocess
 
 def copy_exif_data(original_file, new_file):
     # Keys to copy
@@ -595,7 +607,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def initButtonsAndCheckBoxes(self):
         self.printButton = QPushButton("Convert selected videos", self)
-        self.printButton.clicked.connect(self.convert_video)
+        self.printButton.clicked.connect(self.convert_videos)
 
         self.selectAllCheckBox = QtWidgets.QCheckBox("Select All", self)
         self.selectAllCheckBox.stateChanged.connect(self.selectAllChanged)
@@ -740,7 +752,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     total_checked += 1
         return total_checked
 
-    def convert_video(self):
+    def convert_videos(self):
         total_checked = self.get_total_checked_videos()
         if total_checked == 0:
             QMessageBox.information(self, "No Videos Selected", "Please select videos to convert.")
@@ -793,7 +805,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # print(export_settings)
 
-        new_file_path = convert_video_handbrake(old_file_path, export_settings)
+        new_file_path = convert_selected_video(old_file_path, export_settings)
         copy_exif_data(old_file_path, new_file_path)
         update_timestamp(old_file_path, new_file_path)
 
