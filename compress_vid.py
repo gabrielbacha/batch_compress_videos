@@ -383,9 +383,6 @@ def update_timestamp(original_file, new_file):
         subprocess.run(touch_command, check=True)
         print(f"EXIF 'Create Date' not found. Timestamp updated using touch -r from {original_file}")
 
-
-
-
 def old_file_new_name(input_path):
     file_base, file_extension = os.path.splitext(input_path)
     counter = 1
@@ -438,64 +435,75 @@ import sys
 import os
 
 class MainWindow(QtWidgets.QMainWindow):
-
     def __init__(self):
         super().__init__()
-        
-        self.setup_tree()
-        self.setup_model()
+        self.initUI()
+
+    def initUI(self):
+        self.initTree()
+        self.initButtonsAndCheckBoxes()
+        self.setupLayout()
         self.resize_window()
+        self.centerWindowOnScreen()
 
-        ## Use dialog box to get directory path
-        path = self.get_directory_path()  # Use the dialog box to get the directory path
-        if path is None:
-            # User cancelled the dialog box
-            return
-
-        
-        self.setCentralWidget(self.tree)
-
-        self.tree.sortByColumn(1, Qt.AscendingOrder)
-
-        self.populate_tree(path)
-
-
-        # Add a button to the window
-        self.printButton = QPushButton("Convert selected videos", self)
-        self.printButton.clicked.connect(self.convert_video)
-
-        # Add checkboxes for 'Select All'
-        self.selectAllCheckBox = QtWidgets.QCheckBox("Select All", self)
-        self.selectAllCheckBox.stateChanged.connect(self.selectAllChanged)
-        self.forceHQAllCheckBox = QtWidgets.QCheckBox("Force HQ All", self)
-        self.forceHQAllCheckBox.stateChanged.connect(self.forceHQAllChanged)
-
-        # Add 'Show in Finder' button
-        self.showInFinderButton = QtWidgets.QPushButton("Show in Finder", self)
-        self.showInFinderButton.clicked.connect(self.showInFinder)
-
-        # Layout adjustments to include the checkboxes
-        layout = QtWidgets.QVBoxLayout()
-        layout.addWidget(self.selectAllCheckBox)
-        layout.addWidget(self.forceHQAllCheckBox)
-        layout.addWidget(self.tree)  # Your existing tree
-        layout.addWidget(self.printButton)
-        layout.addWidget(self.showInFinderButton)
-        container = QtWidgets.QWidget()
-        container.setLayout(layout)
-        self.setCentralWidget(container)
-
-    
-    def setup_tree(self):
+    def initTree(self):
         self.tree = QTreeView()
         self.tree.setHeaderHidden(False)
         self.tree.setAlternatingRowColors(True)
         self.tree.setUniformRowHeights(True)
-        self.tree.setSortingEnabled(True)  # Enable sorting
+        self.tree.setSortingEnabled(True)
 
-    def setup_model(self):
         self.model = QStandardItemModel()
+        self.model.setHorizontalHeaderLabels(['Select', 'Name', 'Size', 'Rating'])
         self.tree.setModel(self.model)
+
+        path = self.get_directory_path()
+        if path:
+            self.populate_tree(path)
+        self.tree.sortByColumn(1, Qt.AscendingOrder)
+
+    def initButtonsAndCheckBoxes(self):
+        self.printButton = QPushButton("Convert selected videos", self)
+        self.printButton.clicked.connect(self.convert_video)
+
+        self.selectAllCheckBox = QtWidgets.QCheckBox("Select All", self)
+        self.selectAllCheckBox.stateChanged.connect(self.selectAllChanged)
+
+        self.forceHQAllCheckBox = QtWidgets.QCheckBox("Force HQ All", self)
+        self.forceHQAllCheckBox.stateChanged.connect(self.forceHQAllChanged)
+
+        self.showInFinderButton = QtWidgets.QPushButton("Show in Finder", self)
+        self.showInFinderButton.clicked.connect(self.showInFinder)
+
+    def setupLayout(self):
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(self.selectAllCheckBox)
+        layout.addWidget(self.forceHQAllCheckBox)
+        layout.addWidget(self.tree)
+        layout.addWidget(self.printButton)
+        layout.addWidget(self.showInFinderButton)
+
+        container = QtWidgets.QWidget()
+        container.setLayout(layout)
+        self.setCentralWidget(container)
+
+    def resize_window(self):
+        # Obtain the size of the screen
+        screen = QtWidgets.QApplication.primaryScreen().geometry()
+
+        # Calculate 80% of the screen width and convert to integer
+        width = int(screen.width() * 0.8)
+        height = int(screen.height() * 0.6)  # You can choose to keep the current height or set your own
+
+        # Set the window size with integer width and height
+        self.resize(width, height)
+
+    def centerWindowOnScreen(self):
+        # Centers the window on the screen
+        centerPoint = QtWidgets.QApplication.desktop().availableGeometry().center()
+        frameGm = self.frameGeometry()
+        frameGm.moveCenter(centerPoint)
+        self.move(frameGm.topLeft())
 
     def get_directory_path(self):
         ##Logic to save the last used directory
@@ -532,30 +540,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 if item is not None:
                     item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
 
-
-    def resizeColumnsBasedOnVideos(self):
-        max_widths = [0] * self.model.columnCount()
-
-        for folder_row in range(self.model.rowCount()):
-            folder_item = self.model.item(folder_row)
-            for video_row in range(folder_item.rowCount()):
-                for column in range(self.model.columnCount()):
-                    video_item = folder_item.child(video_row, column)
-                    if video_item is not None:
-                        # Measure the width required for this item
-                        text = video_item.text()
-                        font_metrics = self.tree.fontMetrics()
-                        width = font_metrics.boundingRect(text).width()
-
-                        # Update the maximum width if necessary
-                        if width > max_widths[column]:
-                            max_widths[column] = width
-
-        # Resize each column to the maximum width found
-        for column, width in enumerate(max_widths):
-            self.tree.setColumnWidth(column, width + 10)  # Add a small buffer for padding
-
-
     def forceHQAllChanged(self, state):
         for row in range(self.model.rowCount()):
             folder_item = self.model.item(row)
@@ -563,19 +547,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 item = folder_item.child(child_row, 3)  # 3 is the index for 'Force HQ' column
                 if item is not None:
                     item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
-
-
-    def resize_window(self):
-        # Obtain the size of the screen
-        screen = QtWidgets.QApplication.primaryScreen().geometry()
-
-        # Calculate 80% of the screen width and convert to integer
-        width = int(screen.width() * 0.8)
-        height = int(screen.height() * 0.6)  # You can choose to keep the current height or set your own
-
-        # Set the window size with integer width and height
-        self.resize(width, height)
-
     
     def showInFinder(self):
         # Logic to open the selected directory in Finder or File Explorer
@@ -612,25 +583,10 @@ class MainWindow(QtWidgets.QMainWindow):
             if check_item.checkState() == Qt.Checked:
                 current_checked += 1
                 file_name = self.model.item(row, 1).text()
-                print("=" * 80)
-                print("=" * 80)
-                print("=" * 80)
-                print("=" * 80)
-                print("=" * 80)
-                print("=" * 80)
-                print("=" * 80)
-                print("=" * 80)
-                print("=" * 80)
+                print("\n".join("=" * 80 for _ in range(9)))
                 print(f"================Processing {file_name} - {current_checked}/{total_checked}================")
-                print("=" * 80)
-                print("=" * 80)
-                print("=" * 80)
-                print("=" * 80)
-                print("=" * 80)
-                print("=" * 80)
-                print("=" * 80)
-                print("=" * 80)
-                print("=" * 80)
+                print("\n".join("=" * 80 for _ in range(9)))
+
 
                 old_file_path = self.model.item(row, 16).text()
                 renamed_old_file_path = self.model.item(row, 15).text()
@@ -663,26 +619,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
 
-    def center_on_screen(self):
-        # Get the screen resolution of your monitor
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        # Get the window size
-        window_size = self.geometry()
-        
-        # Calculate the center position
-        center_position = QtCore.QPoint(
-            (resolution.width() - window_size.width()) // 2,
-            (resolution.height() - window_size.height()) // 2
-        )
-        
-        # Move the window to the center position
-        self.move(center_position)
-
-
-    
     def populate_tree(self, path):
-        # Assuming get_export_bitrate and save_new_filename are defined 
-        # and imported along with get_video_info and get_rating
         
         self.model.setHorizontalHeaderLabels([
             'Select', 'Name', 'Rating', 'Force HQ', 'Duration', 'Dimensions', 'FPS',
@@ -690,9 +627,10 @@ class MainWindow(QtWidgets.QMainWindow):
             'Est. New Size', 'Compression %', 'Converted File Name', 'Renamed Old File Name', 'Full File Path'
         ])
 
-        grey_brush = QBrush(QColor(128, 128, 128))  # Grey color
         folder_structure = {}
         videos_list = parse_videos(path)
+
+        grey_brush = QBrush(QColor(128, 128, 128))  # Grey color
         rows_to_grey_out = []  # List to keep track of rows to grey out
 
         for video_path in videos_list:
@@ -747,27 +685,55 @@ class MainWindow(QtWidgets.QMainWindow):
 
                 folder_item.appendRow(video_row_items)
 
-                self.resizeColumnsBasedOnVideos
 
-                base_name = os.path.splitext(os.path.basename(video))[0]
-                old_file_name = f"{base_name}_OLD"
-
-                if any(old_file_name in file for file in videos_list):
-                    current_row = self.model.rowCount()
-                    rows_to_grey_out.append((current_row - 1, old_file_name))
 
 
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication([])
     window = MainWindow()
-    window.center_on_screen()  # Center the window on the screen
     window.show()
     app.exec_()
 
 
 
 
+                # self.resizeColumnsBasedOnVideos() #TODO
+
+    # def resizeColumnsBasedOnVideos(self):
+    #     max_widths = [0] * self.model.columnCount()
+
+    #     for folder_row in range(self.model.rowCount()):
+    #         folder_item = self.model.item(folder_row)
+    #         for video_row in range(folder_item.rowCount()):
+    #             for column in range(self.model.columnCount()):
+    #                 video_item = folder_item.child(video_row, column)
+    #                 if video_item is not None:
+    #                     # Measure the width required for this item
+    #                     text = video_item.text()
+    #                     font_metrics = self.tree.fontMetrics()
+    #                     width = font_metrics.boundingRect(text).width()
+
+    #                     # Update the maximum width if necessary
+    #                     if width > max_widths[column]:
+    #                         max_widths[column] = width
+
+    #     # Resize each column to the maximum width found
+    #     for column, width in enumerate(max_widths):
+    #         self.tree.setColumnWidth(column, width + 10)  # Add a small buffer for padding
+
+
+
+
+
+
+
+                # base_name = os.path.splitext(os.path.basename(video))[0]
+                # old_file_name = f"{base_name}_OLD"
+
+                # if any(old_file_name in file for file in videos_list):
+                #     current_row = self.model.rowCount()
+                #     rows_to_grey_out.append((current_row - 1, old_file_name))
 
             # # Grey out the necessary rows
             # for row_index, old_file_name in rows_to_grey_out:
