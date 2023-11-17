@@ -653,13 +653,16 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             return []
 
-    
+    def is_item_greyed_out(self, item):
+        # Assuming greyed-out items have a specific foreground color, e.g., grey
+        return item.foreground().color() == QColor('grey')
+
     def selectAllChanged(self, state):
         for row in range(self.model.rowCount()):
             folder_item = self.model.item(row)
             for child_row in range(folder_item.rowCount()):
                 item = folder_item.child(child_row, self.COL_SELECT)
-                if item is not None and item.isCheckable():
+                if item is not None and item.isCheckable() and not self.is_item_greyed_out(item):
                     item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
 
     def forceHQAllChanged(self, state):
@@ -667,7 +670,7 @@ class MainWindow(QtWidgets.QMainWindow):
             folder_item = self.model.item(row)
             for child_row in range(folder_item.rowCount()):
                 item = folder_item.child(child_row, self.COL_FORCE_HQ)  # 3 is the index for 'Force HQ' column
-                if item is not None and item.isCheckable():
+                if item is not None and item.isCheckable() and not self.is_item_greyed_out(item):
                     item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
 
     def deleteConvertedVideosChanged(self, state):
@@ -676,13 +679,13 @@ class MainWindow(QtWidgets.QMainWindow):
     def select_all_for_folder(self, folder_item, state):
         for row in range(folder_item.rowCount()):
             item = folder_item.child(row, self.COL_SELECT)
-            if item is not None and item.isCheckable():
+            if item is not None and item.isCheckable() and not self.is_item_greyed_out(item):
                 item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
 
     def force_hq_all_for_folder(self, folder_item, state):
         for row in range(folder_item.rowCount()):
             item = folder_item.child(row, self.COL_FORCE_HQ)
-            if item is not None and item.isCheckable():
+            if item is not None and item.isCheckable() and not self.is_item_greyed_out(item):
                 item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
 
     def onItemChanged(self, item):
