@@ -432,7 +432,7 @@ from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor
 import os
 import json
 import sys
-import os
+import subprocess
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
@@ -587,7 +587,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 print(f"================Processing {file_name} - {current_checked}/{total_checked}================")
                 print("\n".join("=" * 80 for _ in range(9)))
 
-
                 old_file_path = self.model.item(row, 16).text()
                 renamed_old_file_path = self.model.item(row, 15).text()
 
@@ -620,70 +619,139 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
     def populate_tree(self, path):
-        
-        self.model.setHorizontalHeaderLabels([
+        self.setup_tree_headers()
+        folder_structure = self.build_folder_structure(path)
+        self.populate_folders(folder_structure)
+
+    def setup_tree_headers(self):
+        headers = [
             'Select', 'Name', 'Rating', 'Force HQ', 'Duration', 'Dimensions', 'FPS',
             'Codec', 'Bit Rate', 'Size (MB)', 'New Codec', 'New Bit Rate',
-            'Est. New Size', 'Compression %', 'Converted File Name', 'Renamed Old File Name', 'Full File Path'
-        ])
+            'Est. New Size', 'Compression %', 'Converted File Name', 
+            'Renamed Old File Name', 'Full File Path'
+        ]
+        self.model.setHorizontalHeaderLabels(headers)
 
+    def build_folder_structure(self, path):
         folder_structure = {}
         videos_list = parse_videos(path)
-
-        grey_brush = QBrush(QColor(128, 128, 128))  # Grey color
-        rows_to_grey_out = []  # List to keep track of rows to grey out
-
         for video_path in videos_list:
             folder_path = os.path.dirname(video_path)
-            if folder_path not in folder_structure:
-                folder_structure[folder_path] = []
+            folder_structure.setdefault(folder_path, []).append(video_path)
+        return folder_structure
 
-            folder_structure[folder_path].append(video_path)
-
+    def populate_folders(self, folder_structure):
         for folder, videos in folder_structure.items():
             folder_item = QStandardItem(os.path.basename(folder))
             self.model.appendRow(folder_item)
-                
             for video in videos:
-                video_info = get_video_info(video)
-                print(f'Processing {os.path.basename(video)}')
-                export_settings = get_export_bitrate(video_info)
-                converted_file_data = estimate_new_file_size(video_info, export_settings)
-                
-                new_file_size = converted_file_data['new_file_size_mb']
-                converted_file_name = save_new_filename(video)
-                renamed_old_file_name = old_file_new_name(video)
-
-                item_select = QStandardItem()
-                item_select.setCheckable(True)
-                item_select.setCheckState(Qt.Unchecked)
-
-                item_force_hq = QStandardItem()
-                item_force_hq.setCheckable(True)
-                item_force_hq.setCheckState(Qt.Unchecked)
-
-                # Populate the row with all the necessary items
-                video_row_items = [
-                    item_select,
-                    QStandardItem(os.path.basename(video)), #filename
-                    QStandardItem(str(video_info['rating'])), #rating
-                    item_force_hq, #force HQ
-                    QStandardItem(video_info['duration_str'].split('.')[0]), #duration
-                    QStandardItem(video_info['dimensions']), #dimensions
-                    QStandardItem(str(video_info['fps'])), #fps
-                    QStandardItem(video_info['video_codec']), #current codec
-                    QStandardItem(str(video_info['video_bitrate'])), #current bitrate
-                    QStandardItem(f"{video_info['size_mb']} MB"), #current size
-                    QStandardItem(export_settings['new_codec']), #new codec
-                    QStandardItem(str(export_settings['new_bitrate'])), #new bitrate
-                    QStandardItem(str(f'{new_file_size} MB')), #new size
-                    QStandardItem(converted_file_data['compression_ratio']), #compression ratio
-                    QStandardItem(converted_file_name), # new file name
-                    QStandardItem(renamed_old_file_name), #remaining file name
-                    QStandardItem(video),# os.path.basename(video)), #full path
-                ]
-
+                video_row_items = self.create_video_row_items(video)
                 folder_item.appendRow(video_row_items)
+
+    def create_video_row_items(self, video):
+        video_info = get_video_info(video)
+        export_settings = get_export_bitrate(video_info)
+        converted_file_data = estimate_new_file_size(video_info, export_settings)
+        new_file_size = converted_file_data['new_file_size_mb']
+        converted_file_name = save_new_filename(video)
+        renamed_old_file_name = old_file_new_name(video)
+
+        item_select = QStandardItem()
+        item_select.setCheckable(True)
+        item_select.setCheckState(Qt.Unchecked)
+
+        item_force_hq = QStandardItem()
+        item_force_hq.setCheckable(True)
+        item_force_hq.setCheckState(Qt.Unchecked)
+
+        # Populate the row with all the necessary items
+        video_row_items = [
+            item_select,
+            QStandardItem(os.path.basename(video)), #filename
+            QStandardItem(str(video_info['rating'])), #rating
+            item_force_hq, #force HQ
+            QStandardItem(video_info['duration_str'].split('.')[0]), #duration
+            QStandardItem(video_info['dimensions']), #dimensions
+            QStandardItem(str(video_info['fps'])), #fps
+            QStandardItem(video_info['video_codec']), #current codec
+            QStandardItem(str(video_info['video_bitrate'])), #current bitrate
+            QStandardItem(f"{video_info['size_mb']} MB"), #current size
+            QStandardItem(export_settings['new_codec']), #new codec
+            QStandardItem(str(export_settings['new_bitrate'])), #new bitrate
+            QStandardItem(str(f'{new_file_size} MB')), #new size
+            QStandardItem(converted_file_data['compression_ratio']), #compression ratio
+            QStandardItem(converted_file_name), # new file name
+            QStandardItem(renamed_old_file_name), #remaining file name
+            QStandardItem(video),# os.path.basename(video)), #full path
+        ]
+        return video_row_items
+
+
+    # def populate_tree(self, path):
+        
+    #     self.model.setHorizontalHeaderLabels([
+    #         'Select', 'Name', 'Rating', 'Force HQ', 'Duration', 'Dimensions', 'FPS',
+    #         'Codec', 'Bit Rate', 'Size (MB)', 'New Codec', 'New Bit Rate',
+    #         'Est. New Size', 'Compression %', 'Converted File Name', 'Renamed Old File Name', 'Full File Path'
+    #     ])
+
+    #     folder_structure = {}
+    #     videos_list = parse_videos(path)
+
+    #     grey_brush = QBrush(QColor(128, 128, 128))  # Grey color
+    #     rows_to_grey_out = []  # List to keep track of rows to grey out
+
+    #     for video_path in videos_list:
+    #         folder_path = os.path.dirname(video_path)
+    #         if folder_path not in folder_structure:
+    #             folder_structure[folder_path] = []
+
+    #         folder_structure[folder_path].append(video_path)
+
+    #     for folder, videos in folder_structure.items():
+    #         folder_item = QStandardItem(os.path.basename(folder))
+    #         self.model.appendRow(folder_item)
+                
+    #         for video in videos:
+    #             video_info = get_video_info(video)
+    #             print(f'Processing {os.path.basename(video)}')
+    #             export_settings = get_export_bitrate(video_info)
+    #             converted_file_data = estimate_new_file_size(video_info, export_settings)
+                
+    #             new_file_size = converted_file_data['new_file_size_mb']
+    #             converted_file_name = save_new_filename(video)
+    #             renamed_old_file_name = old_file_new_name(video)
+
+    #             item_select = QStandardItem()
+    #             item_select.setCheckable(True)
+    #             item_select.setCheckState(Qt.Unchecked)
+
+    #             item_force_hq = QStandardItem()
+    #             item_force_hq.setCheckable(True)
+    #             item_force_hq.setCheckState(Qt.Unchecked)
+
+    #             # Populate the row with all the necessary items
+    #             video_row_items = [
+    #                 item_select,
+    #                 QStandardItem(os.path.basename(video)), #filename
+    #                 QStandardItem(str(video_info['rating'])), #rating
+    #                 item_force_hq, #force HQ
+    #                 QStandardItem(video_info['duration_str'].split('.')[0]), #duration
+    #                 QStandardItem(video_info['dimensions']), #dimensions
+    #                 QStandardItem(str(video_info['fps'])), #fps
+    #                 QStandardItem(video_info['video_codec']), #current codec
+    #                 QStandardItem(str(video_info['video_bitrate'])), #current bitrate
+    #                 QStandardItem(f"{video_info['size_mb']} MB"), #current size
+    #                 QStandardItem(export_settings['new_codec']), #new codec
+    #                 QStandardItem(str(export_settings['new_bitrate'])), #new bitrate
+    #                 QStandardItem(str(f'{new_file_size} MB')), #new size
+    #                 QStandardItem(converted_file_data['compression_ratio']), #compression ratio
+    #                 QStandardItem(converted_file_name), # new file name
+    #                 QStandardItem(renamed_old_file_name), #remaining file name
+    #                 QStandardItem(video),# os.path.basename(video)), #full path
+    #             ]
+
+    #             folder_item.appendRow(video_row_items)
 
 
 
