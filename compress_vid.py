@@ -486,7 +486,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tree.resizeColumnToContents(self.COL_FULL_FILE_PATH)  
         
         #Sort by column
-        self.tree.sortByColumn(1, Qt.AscendingOrder)
+        self.tree.sortByColumn(self.COL_NAME, Qt.AscendingOrder)
 
     def initButtonsAndCheckBoxes(self):
         self.printButton = QPushButton("Convert selected videos", self)
@@ -717,6 +717,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setup_tree_headers()
         folder_structure = self.build_folder_structure(path)
         self.populate_folders(folder_structure)
+        # Grey out old versions
+        self.update_row_styles()
 
     def setup_tree_headers(self):
         headers = [
@@ -763,9 +765,22 @@ class MainWindow(QtWidgets.QMainWindow):
             folder_index = self.model.indexFromItem(folder_item)
             self.tree.expand(folder_index)  # Expands the folder row
 
+            print(f"Adding {len(videos)} videos to folder: {folder}")  # Debugging line
+
+            video_count = 0  # Initialize a counter for the videos in the current folder
+
             for video in videos:
                 video_row_items = self.create_video_row_items(video)
                 folder_item.appendRow(video_row_items)
+                video_count += 1  # Increment the counter for each video
+
+            # self.model.appendRow(folder_item)
+            print(f"Folder '{folder}' has {video_count} videos")  # Display the video count for the current folder
+            
+
+            #TODO
+            # self.model.appendRow(folder_item)
+            # print(f"Folder {folder} now has {folder_item.rowCount()} videos")  # Debugging line
     
     def format_columns(self, video_row_items):
         for col, item in enumerate(video_row_items):
@@ -787,6 +802,62 @@ class MainWindow(QtWidgets.QMainWindow):
         font = QFont()
         font.setBold(True)
         item.setFont(font)
+
+    def update_row_styles(self):
+        grey_brush = QBrush(QColor('grey'))
+        font = QFont()
+        font.setStrikeOut(True)
+
+        for folder_row in range(self.model.rowCount()):
+            folder_item = self.model.item(folder_row)
+            print(f"Checking folder {folder_row}, which has {folder_item.rowCount()} videos")  # Debugging line
+            for video_row in range(folder_item.rowCount()):
+                video_item = folder_item.child(video_row, self.COL_NAME)
+                base_name, _ = os.path.splitext(video_item.text())
+                old_file_name = f"{base_name}_OLD"
+
+                compression_ratio_item = folder_item.child(video_row, self.COL_COMPRESSION_PERCENT)
+                compression_ratio = self.parse_compression_ratio(compression_ratio_item.text()) if compression_ratio_item else 100.0
+
+                if compression_ratio < 10.0:
+                    print(f"Row {video_row} in folder {folder_row} has compression < 10%: {compression_ratio}%")  # Debugging line
+                else:
+                    print(f"Row {video_row} in folder {folder_row} has compression > 10%: {compression_ratio}%")  # Debugging line
+
+                if self.check_old_file_exists(folder_item, old_file_name) or compression_ratio < 10.0:
+                    self.update_row_style(folder_item, video_row, grey_brush, font)
+                    if old_file_name:
+                        self.update_row_style_for_old_file(folder_item, old_file_name, grey_brush, font)
+
+
+    def check_old_file_exists(self, folder_item, old_file_name):
+        for row in range(folder_item.rowCount()):
+            item = folder_item.child(row, self.COL_NAME)
+            if item and old_file_name in item.text():
+                return True
+        return False
+
+    def parse_compression_ratio(self, ratio_str):
+        try:
+            return float(ratio_str.rstrip('%'))
+        except ValueError:
+            return 100.0
+
+    def update_row_style(self, folder_item, row, brush, font):
+        for col in range(self.model.columnCount()):
+            item = folder_item.child(row, col)
+            if item:
+                item.setForeground(brush)
+                item.setFont(font)
+
+    def update_row_style_for_old_file(self, folder_item, old_file_name, brush, font):
+        for row in range(folder_item.rowCount()):
+            item = folder_item.child(row, self.COL_NAME)
+            if item and old_file_name in item.text():
+                self.update_row_style(folder_item, row, brush, font)
+
+
+    
 
     def create_video_row_items(self, video):
         video_info = get_video_info(video)
