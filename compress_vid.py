@@ -466,42 +466,34 @@ def centerWindowOnScreen(window):
 class SubfolderSelectionDialog(QDialog):
     def __init__(self, root_folder, parent=None):
         super().__init__(parent)
+        self.setup_window()
+        self.setup_tree_view()
+        self.populate_tree_with_root_and_subfolders(root_folder)
+        self.setup_layout()
+
+    def setup_window(self):
         self.setWindowTitle("Select Subfolders")
         resize_window(self)
-        centerWindowOnScreen(self)     
+        centerWindowOnScreen(self)
 
+    def setup_tree_view(self):
         self.treeView = QTreeView(self)
         self.treeView.setHeaderHidden(False)
         self.treeView.setAlternatingRowColors(True)
 
-
         self.model = QStandardItemModel()
         self.model.setHorizontalHeaderLabels(["Select", "Folder Name", "Full Path"])
-
-        self.populate_tree(root_folder)
-
         self.treeView.setModel(self.model)
-        self.treeView.expandAll()
-        self.treeView.resizeColumnToContents(0)  
-        self.treeView.resizeColumnToContents(1)  
-        self.treeView.resizeColumnToContents(2)  
 
-        buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
-        buttonBox.accepted.connect(self.accept)
-        buttonBox.rejected.connect(self.reject)
-
-        layout = QVBoxLayout(self)
-        layout.addWidget(self.treeView)
-        layout.addWidget(buttonBox)
-
-    def populate_tree(self, root_folder):
-        self.add_folder_item(root_folder, checked=True)  # Optionally set checked=True to pre-select the root
-        
-        subfolders = [os.path.join(root_folder, name) for name in os.listdir(root_folder)
-                      if os.path.isdir(os.path.join(root_folder, name))]
-
+    def populate_tree_with_root_and_subfolders(self, root_folder):
+        self.add_folder_item(root_folder, checked=True)
+        subfolders = self.get_subfolders(root_folder)
         for folder in subfolders:
             self.add_folder_item(folder)
+
+    def get_subfolders(self, root_folder):
+        return [os.path.join(root_folder, name) for name in os.listdir(root_folder)
+                if os.path.isdir(os.path.join(root_folder, name))]
 
     def add_folder_item(self, folder_path, checked=False):
         select_item = QStandardItem()
@@ -513,12 +505,27 @@ class SubfolderSelectionDialog(QDialog):
 
         self.model.appendRow([select_item, folder_name_item, full_path_item])
 
-    def selectedFolders(self):
+    def setup_layout(self):
+        self.treeView.expandAll()
+        self.treeView.resizeColumnToContents(0)
+        self.treeView.resizeColumnToContents(1)
+        self.treeView.resizeColumnToContents(2)
+
+        buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
+        buttonBox.accepted.connect(self.accept)
+        buttonBox.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.treeView)
+        layout.addWidget(buttonBox)
+
+    def selected_folders(self):
         selected_folders = []
         for row in range(self.model.rowCount()):
             if self.model.item(row, 0).checkState() == Qt.Checked:
                 selected_folders.append(self.model.item(row, 2).text())
         return selected_folders
+
 
 class MainWindow(QtWidgets.QMainWindow):
     COL_NAME = 0
@@ -563,9 +570,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
         path = self.get_directory_path()
         if path:
-            selected_folders = self.get_subfolder_selection(path)
-            for folder in selected_folders:
-                self.populate_tree(folder)  # Assuming populate_tree can handle individual folders
+            if not self.has_subfolders(path):
+                self.populate_tree(path)
+            else:
+                selected_folders = self.get_subfolder_selection(path)
+                for folder in selected_folders:
+                    self.populate_tree(folder)  # Assuming populate_tree can handle individual folders
         
         # Auto-size columns
         self.tree.resizeColumnToContents(self.COL_NAME)  
@@ -606,7 +616,8 @@ class MainWindow(QtWidgets.QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
-
+    def has_subfolders(self, path):
+        return any(os.path.isdir(os.path.join(path, name)) for name in os.listdir(path))
 
     def get_directory_path(self):
         ##Logic to save the last used directory
@@ -638,7 +649,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def get_subfolder_selection(self, root_folder):
         dialog = SubfolderSelectionDialog(root_folder, self)
         if dialog.exec_() == QDialog.Accepted:
-            return dialog.selectedFolders()
+            return dialog.selected_folders()
         else:
             return []
 
