@@ -435,6 +435,24 @@ import sys
 import subprocess
 
 class MainWindow(QtWidgets.QMainWindow):
+    COL_NAME = 0
+    COL_SELECT = 1
+    COL_FORCE_HQ = 2
+    COL_RATING = 3
+    COL_DURATION = 4
+    COL_DIMENSIONS = 5
+    COL_FPS = 6
+    COL_CODEC = 7
+    COL_BIT_RATE = 8
+    COL_SIZE_MB = 9
+    COL_NEW_CODEC = 10
+    COL_NEW_BIT_RATE = 11
+    COL_EST_NEW_SIZE = 12
+    COL_COMPRESSION_PERCENT = 13
+    COL_CONVERTED_FILE_NAME = 14
+    COL_RENAMED_OLD_FILE_NAME = 15
+    COL_FULL_FILE_PATH = 16
+
     def __init__(self):
         super().__init__()
         self.initUI()
@@ -454,6 +472,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tree.setSortingEnabled(True)
 
         self.model = QStandardItemModel()
+        self.model.itemChanged.connect(self.onItemChanged)
         self.model.setHorizontalHeaderLabels(['Select', 'Name', 'Size', 'Rating'])
         self.tree.setModel(self.model)
 
@@ -536,17 +555,39 @@ class MainWindow(QtWidgets.QMainWindow):
         for row in range(self.model.rowCount()):
             folder_item = self.model.item(row)
             for child_row in range(folder_item.rowCount()):
-                item = folder_item.child(child_row, 0)  # 0 is the index for 'Select' column
-                if item is not None:
+                item = folder_item.child(child_row, self.COL_SELECT)
+                if item is not None and item.isCheckable():
                     item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
 
     def forceHQAllChanged(self, state):
         for row in range(self.model.rowCount()):
             folder_item = self.model.item(row)
             for child_row in range(folder_item.rowCount()):
-                item = folder_item.child(child_row, 3)  # 3 is the index for 'Force HQ' column
-                if item is not None:
+                item = folder_item.child(child_row, self.COL_FORCE_HQ)  # 3 is the index for 'Force HQ' column
+                if item is not None and item.isCheckable():
                     item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
+
+    def select_all_for_folder(self, folder_item, state):
+        for row in range(folder_item.rowCount()):
+            item = folder_item.child(row, self.COL_SELECT)
+            if item is not None and item.isCheckable():
+                item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
+
+    def force_hq_all_for_folder(self, folder_item, state):
+        for row in range(folder_item.rowCount()):
+            item = folder_item.child(row, self.COL_FORCE_HQ)
+            if item is not None and item.isCheckable():
+                item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
+
+    def onItemChanged(self, item):
+    # Check if the changed item is a folder-level checkbox
+        if item.column() in [self.COL_SELECT, self.COL_FORCE_HQ]:
+            folder_item = item.data(Qt.UserRole)
+            if folder_item:
+                if item.column() == self.COL_SELECT:
+                    self.select_all_for_folder(folder_item, item.checkState())
+                elif item.column() == self.COL_FORCE_HQ:
+                    self.force_hq_all_for_folder(folder_item, item.checkState())
     
     def showInFinder(self):
         # Logic to open the selected directory in Finder or File Explorer
@@ -575,32 +616,32 @@ class MainWindow(QtWidgets.QMainWindow):
         QtWidgets.QApplication.quit()
 
     def convert_video(self):
-        total_checked = sum(self.model.item(row, 0).checkState() == Qt.Checked for row in range(self.model.rowCount()))
+        total_checked = sum(self.model.item(row, self.COL_SELECT).checkState() == Qt.Checked for row in range(self.model.rowCount()))
         current_checked = 0
 
         for row in range(self.model.rowCount()):
-            check_item = self.model.item(row, 0)  # 0 is the index for 'Select' column
+            check_item = self.model.item(row, self.COL_SELECT)  
             if check_item.checkState() == Qt.Checked:
                 current_checked += 1
-                file_name = self.model.item(row, 1).text()
+                file_name = self.model.item(row, self.COL_NAME).text()
                 print("\n".join("=" * 80 for _ in range(9)))
                 print(f"================Processing {file_name} - {current_checked}/{total_checked}================")
                 print("\n".join("=" * 80 for _ in range(9)))
 
-                old_file_path = self.model.item(row, 16).text()
-                renamed_old_file_path = self.model.item(row, 15).text()
+                old_file_path = self.model.item(row, self.COL_FULL_FILE_PATH).text()
+                renamed_old_file_path = self.model.item(row, self.COL_RENAMED_OLD_FILE_NAME).text()
 
                 video_info = {
-                    'video_codec': self.model.item(row, 7).text(),
-                    'dimensions': self.model.item(row, 5).text(),
-                    'video_bitrate': self.model.item(row, 8).text(),
-                    'fps': self.model.item(row, 6).text(),
-                    'duration_str': self.model.item(row, 4).text(),
-                    'size_mb': self.model.item(row, 9).text(),
-                    'rating': self.model.item(row, 2).text(),
+                    'video_codec': self.model.item(row, self.COL_CODEC).text(),
+                    'dimensions': self.model.item(row, self.COL_DIMENSIONS).text(),
+                    'video_bitrate': self.model.item(row, self.COL_BIT_RATE).text(),
+                    'fps': self.model.item(row, self.COL_FPS).text(),
+                    'duration_str': self.model.item(row, self.COL_DURATION).text(),
+                    'size_mb': self.model.item(row, self.COL_SIZE_MB).text(),
+                    'rating': self.model.item(row, self.COL_RATING).text(),
                 }
 
-                force_hq = self.model.item(row, 3).checkState() == Qt.Checked  # Checking Force HQ checkbox
+                force_hq = self.model.item(row, COL_FORCE_HQ).checkState() == Qt.Checked  # Checking Force HQ checkbox
                 export_settings = get_export_bitrate(video_info, force_hq)
                 print(export_settings)
 
@@ -625,7 +666,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def setup_tree_headers(self):
         headers = [
-            'Select', 'Name', 'Rating', 'Force HQ', 'Duration', 'Dimensions', 'FPS',
+            'Name', 'Select', 'Force HQ', 'Rating',  'Duration', 'Dimensions', 'FPS',
             'Codec', 'Bit Rate', 'Size (MB)', 'New Codec', 'New Bit Rate',
             'Est. New Size', 'Compression %', 'Converted File Name', 
             'Renamed Old File Name', 'Full File Path'
@@ -643,10 +684,35 @@ class MainWindow(QtWidgets.QMainWindow):
     def populate_folders(self, folder_structure):
         for folder, videos in folder_structure.items():
             folder_item = QStandardItem(os.path.basename(folder))
-            self.model.appendRow(folder_item)
+
+            # Folder-level 'Select All' checkbox
+            select_all_item = QStandardItem()
+            select_all_item.setCheckable(True)
+            select_all_item.setCheckState(Qt.Unchecked)
+
+            # Folder-level 'Force HQ All' checkbox
+            force_hq_all_item = QStandardItem()
+            force_hq_all_item.setCheckable(True)
+            force_hq_all_item.setCheckState(Qt.Unchecked)
+
+            folder_row_items = [
+                folder_item,  # Folder name
+                select_all_item,  # Select All checkbox
+                force_hq_all_item  # Force HQ All checkbox
+            ]
+            
+            # Store the folder item in the checkbox items for later reference
+            select_all_item.setData(folder_item, Qt.UserRole)
+            force_hq_all_item.setData(folder_item, Qt.UserRole)
+            
+            self.model.appendRow(folder_row_items)
+            folder_index = self.model.indexFromItem(folder_item)
+            self.tree.expand(folder_index)  # Expands the folder row
+
             for video in videos:
                 video_row_items = self.create_video_row_items(video)
                 folder_item.appendRow(video_row_items)
+
 
     def create_video_row_items(self, video):
         video_info = get_video_info(video)
@@ -666,10 +732,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Populate the row with all the necessary items
         video_row_items = [
-            item_select,
+                        
             QStandardItem(os.path.basename(video)), #filename
-            QStandardItem(str(video_info['rating'])), #rating
+            item_select,
             item_force_hq, #force HQ
+            QStandardItem(str(video_info['rating'])), #rating
             QStandardItem(video_info['duration_str'].split('.')[0]), #duration
             QStandardItem(video_info['dimensions']), #dimensions
             QStandardItem(str(video_info['fps'])), #fps
@@ -685,77 +752,6 @@ class MainWindow(QtWidgets.QMainWindow):
             QStandardItem(video),# os.path.basename(video)), #full path
         ]
         return video_row_items
-
-
-    # def populate_tree(self, path):
-        
-    #     self.model.setHorizontalHeaderLabels([
-    #         'Select', 'Name', 'Rating', 'Force HQ', 'Duration', 'Dimensions', 'FPS',
-    #         'Codec', 'Bit Rate', 'Size (MB)', 'New Codec', 'New Bit Rate',
-    #         'Est. New Size', 'Compression %', 'Converted File Name', 'Renamed Old File Name', 'Full File Path'
-    #     ])
-
-    #     folder_structure = {}
-    #     videos_list = parse_videos(path)
-
-    #     grey_brush = QBrush(QColor(128, 128, 128))  # Grey color
-    #     rows_to_grey_out = []  # List to keep track of rows to grey out
-
-    #     for video_path in videos_list:
-    #         folder_path = os.path.dirname(video_path)
-    #         if folder_path not in folder_structure:
-    #             folder_structure[folder_path] = []
-
-    #         folder_structure[folder_path].append(video_path)
-
-    #     for folder, videos in folder_structure.items():
-    #         folder_item = QStandardItem(os.path.basename(folder))
-    #         self.model.appendRow(folder_item)
-                
-    #         for video in videos:
-    #             video_info = get_video_info(video)
-    #             print(f'Processing {os.path.basename(video)}')
-    #             export_settings = get_export_bitrate(video_info)
-    #             converted_file_data = estimate_new_file_size(video_info, export_settings)
-                
-    #             new_file_size = converted_file_data['new_file_size_mb']
-    #             converted_file_name = save_new_filename(video)
-    #             renamed_old_file_name = old_file_new_name(video)
-
-    #             item_select = QStandardItem()
-    #             item_select.setCheckable(True)
-    #             item_select.setCheckState(Qt.Unchecked)
-
-    #             item_force_hq = QStandardItem()
-    #             item_force_hq.setCheckable(True)
-    #             item_force_hq.setCheckState(Qt.Unchecked)
-
-    #             # Populate the row with all the necessary items
-    #             video_row_items = [
-    #                 item_select,
-    #                 QStandardItem(os.path.basename(video)), #filename
-    #                 QStandardItem(str(video_info['rating'])), #rating
-    #                 item_force_hq, #force HQ
-    #                 QStandardItem(video_info['duration_str'].split('.')[0]), #duration
-    #                 QStandardItem(video_info['dimensions']), #dimensions
-    #                 QStandardItem(str(video_info['fps'])), #fps
-    #                 QStandardItem(video_info['video_codec']), #current codec
-    #                 QStandardItem(str(video_info['video_bitrate'])), #current bitrate
-    #                 QStandardItem(f"{video_info['size_mb']} MB"), #current size
-    #                 QStandardItem(export_settings['new_codec']), #new codec
-    #                 QStandardItem(str(export_settings['new_bitrate'])), #new bitrate
-    #                 QStandardItem(str(f'{new_file_size} MB')), #new size
-    #                 QStandardItem(converted_file_data['compression_ratio']), #compression ratio
-    #                 QStandardItem(converted_file_name), # new file name
-    #                 QStandardItem(renamed_old_file_name), #remaining file name
-    #                 QStandardItem(video),# os.path.basename(video)), #full path
-    #             ]
-
-    #             folder_item.appendRow(video_row_items)
-
-
-
-
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication([])
