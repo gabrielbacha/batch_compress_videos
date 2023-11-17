@@ -422,7 +422,7 @@ def rename_with_rollback(original_file_path, intermediate_file_path, final_file_
 
 
 from PyQt5 import QtWidgets, QtCore
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeView, QPushButton, QFileDialog, QMessageBox
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeView, QPushButton, QFileDialog, QMessageBox, QDialog, QVBoxLayout, QCheckBox, QDialogButtonBox 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor, QFont
 import os
@@ -473,7 +473,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         path = self.get_directory_path()
         if path:
-            self.populate_tree(path)
+            selected_folders = self.get_subfolder_selection(path)
+            for folder in selected_folders:
+                self.populate_tree(folder)  # Assuming populate_tree can handle individual folders
         
         # Auto-size the first column
         self.tree.resizeColumnToContents(self.COL_NAME)  
@@ -558,6 +560,35 @@ class MainWindow(QtWidgets.QMainWindow):
             return selected_dir
         else:
             return None
+        
+    def get_subfolder_selection(self, root_folder):
+        # Parse all subfolders in the root folder
+        subfolders = [os.path.join(root_folder, name) for name in os.listdir(root_folder) 
+                    if os.path.isdir(os.path.join(root_folder, name))]
+
+        # Create a dialog with checkboxes for each subfolder
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Select Folders")
+        layout = QVBoxLayout(dialog)
+
+        checkboxes = []
+        for folder in subfolders:
+            cb = QCheckBox(os.path.basename(folder), dialog)
+            cb.folderPath = folder  # Store the folder path in the checkbox
+            checkboxes.append(cb)
+            layout.addWidget(cb)
+
+        buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
+        layout.addWidget(buttonBox)
+        buttonBox.accepted.connect(dialog.accept)
+        buttonBox.rejected.connect(dialog.reject)
+
+        selected_folders = []
+        if dialog.exec_() == QDialog.Accepted:
+            selected_folders = [cb.folderPath for cb in checkboxes if cb.isChecked()]
+
+        return selected_folders
+
     
     def selectAllChanged(self, state):
         for row in range(self.model.rowCount()):
