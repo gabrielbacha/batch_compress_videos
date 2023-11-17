@@ -114,6 +114,5 @@ def process_video_server(video_path):
         print(f"Failed to process {video_path}")
 
 
-
 if __name__ == "__main__":
     main()

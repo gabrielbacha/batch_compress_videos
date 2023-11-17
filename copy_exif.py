@@ -4,108 +4,8 @@ import os
 import json
 import tkinter as tk
 from tkinter import filedialog
+from compress_vid import copy_exif_data, update_timestamp
 
-def copy_exif_data(original_file, new_file):
-    # Keys to copy
-    keys = {
-        'XMP:Rating': 'Rating',
-        'XML:DeviceManufacturer': 'Make',
-        'XML:DeviceModelName': 'Model',
-        'XML:DeviceSerialNo': 'SerialNumber',
-        'QuickTime:CameraLensModel': 'LensModel',
-        'QuickTime:CameraFocalLength35mmEquivalent': 'FocalLengthIn35mmFilm',
-        'QuickTime:Make': 'Make',
-        'QuickTime:Model': 'Model',
-        'QuickTime:Software': 'Software',
-        'QuickTime:CreateDate': 'DateTimeOriginal',
-        'Composite:GPSAltitude': 'GPSAltitude',
-        'Composite:GPSAltitudeRef': 'GPSAltitudeRef',
-        'Composite:GPSLatitude': 'GPSLatitude',
-        'Composite:GPSLongitude': 'GPSLongitude',
-        'Composite:Rotation': 'Rotation'    
-    }
-
-    simplified_keys = {key.split(':')[1]: value for key, value in keys.items()}
-
-    # Read EXIF data from the original file
-    command_read = ['exiftool', '-json', original_file]
-    result = subprocess.run(command_read, capture_output=True, text=True)
-    exif_data = json.loads(result.stdout)[0]
-
-    print("Copying exif data...")
-
-    updated_keys_values = []
-    
-    command_write = ['exiftool', '-P', '-overwrite_original']
-
-    for full_key, simple_key in simplified_keys.items():
-        if full_key in exif_data:
-            value = exif_data[full_key]
-            if isinstance(value, str) and value.strip() == '':
-                continue  # Skip empty string values
-            # print(f'{full_key}:{value}:{simple_key}')
-            command_write.append(f'-{simple_key}={value}')
-            updated_keys_values.append((simple_key, value))
-
-
-    command_write.append(new_file)
-    # print(" ".join(command_write)) 
-    result = subprocess.run(command_write, capture_output=True, text=True)
-
-    # Check the first line of the output to determine if the file was updated
-    first_line = result.stdout.split('\n')[0] if result.stdout else ''
-    if "1 image files updated" in first_line:
-        print("The following keys and values have been updated:")
-        for key, value in updated_keys_values:
-            print(f'Updated {key} to {value}')
-    else:
-        print("No updates were made.")
-        if result.stderr:
-            print("Error:", result.stderr)
-
-    print("Exif data copied.")
-    return exif_data
-
-def update_timestamp(original_file, new_file):
-    print(f"Updating timestamp for: {os.path.basename(new_file)}")
-
-    # Get the original creation time for comparison
-    read_create_date = subprocess.run(['stat', '-f', '%SB', original_file], capture_output=True, text=True)
-    # print(read_create_date.stdout.strip())
-    # Convert the birth time string to a datetime object
-    original_timestamp = datetime.datetime.strptime(read_create_date.stdout.strip(), "%b %d %H:%M:%S %Y")
-    print(f"Original (_OLD) file timestamp: {original_timestamp}")
-
-    # Try to get 'Create Date' from EXIF data
-    command = ['exiftool', '-CreateDate', '-d', '%Y:%m:%d %H:%M:%S', original_file]
-    result = subprocess.run(command, capture_output=True, text=True)
-    create_date_str = result.stdout.strip().split(': ')[-1]  # Extract the date part
-    print(f"{os.path.basename(original_file)} create date is {create_date_str}")
-
-    if create_date_str:
-        try:
-            create_date = datetime.datetime.strptime(create_date_str, '%Y:%m:%d %H:%M:%S')
-            formatted_date = create_date.strftime("%m/%d/%Y %H:%M:%S")
-            setfile_command = ['SetFile', '-d', formatted_date, new_file]
-            subprocess.run(setfile_command, check=True)
-            print(f"'Create Date' set to: {formatted_date} based on EXIF DATA")
-        except ValueError:
-            print("Invalid EXIF 'Create Date'. Using fallback method.")
-            # Fallback method using stat and SetFile
-            creation_date = subprocess.check_output(
-                ['stat', '-f', '%SB', '-t', '%m/%d/%Y %H:%M:%S', original_file]
-            ).decode().strip()
-            setfile_command = ['SetFile', '-d', creation_date, new_file]
-            subprocess.run(setfile_command, check=True)
-            print(f"'Create Date' updated to {creation_date} using stat and SetFile from {original_file}")
-    else:
-        # Fallback to the original file's creation time using stat and SetFile
-        creation_date = subprocess.check_output(
-            ['stat', '-f', '%SB', '-t', '%m/%d/%Y %H:%M:%S', original_file]
-        ).decode().strip()
-        setfile_command = ['SetFile', '-d', creation_date, new_file]
-        subprocess.run(setfile_command, check=True)
-        print(f"EXIF data not found. 'Create Date' updated to {creation_date} using stat and SetFile from {original_file}")
 
 
 def parse_videos_old(input_path):
@@ -170,9 +70,10 @@ def prompt_and_copy_exif():
     for new, old in videos_dict.items():
         counter += 1
         print(f"=====({counter}/{len(videos_dict)})===== Updating {os.path.basename(new)} using {os.path.basename(old)}")
-        # copy_exif_data(old, new)
+        copy_exif_data(old, new)
         update_timestamp(old, new)
 
 prompt_and_copy_exif()
 
-# update_timestamp("/Volumes/One Touch/Videos studio/1. Synced/1.1 Main videos/2022-04-30 Bali videos/DJI/DJI_0488_OLD.MP4", "/Volumes/One Touch/Videos studio/1. Synced/1.1 Main videos/2022-04-30 Bali videos/DJI/DJI_0488.MP4")
+# copy_exif_data("old", "new")
+# update_timestamp("old", "new")
