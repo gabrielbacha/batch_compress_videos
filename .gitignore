@@ -4,3 +4,4 @@ test/*
 .compress_vid_last_dir
 .DS_Store
 __pycache__
+removed.py

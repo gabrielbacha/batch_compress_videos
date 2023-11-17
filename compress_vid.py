@@ -428,7 +428,7 @@ def rename_with_rollback(original_file_path, intermediate_file_path, final_file_
 from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeView, QPushButton, QFileDialog, QMessageBox
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor
+from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor, QFont
 import os
 import json
 import sys
@@ -473,12 +473,19 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.model = QStandardItemModel()
         self.model.itemChanged.connect(self.onItemChanged)
-        self.model.setHorizontalHeaderLabels(['Select', 'Name', 'Size', 'Rating'])
         self.tree.setModel(self.model)
 
         path = self.get_directory_path()
         if path:
             self.populate_tree(path)
+        
+        # Auto-size the first column
+        self.tree.resizeColumnToContents(self.COL_NAME)  
+        self.tree.resizeColumnToContents(self.COL_CONVERTED_FILE_NAME)  
+        self.tree.resizeColumnToContents(self.COL_RENAMED_OLD_FILE_NAME)  
+        self.tree.resizeColumnToContents(self.COL_FULL_FILE_PATH)  
+        
+        #Sort by column
         self.tree.sortByColumn(1, Qt.AscendingOrder)
 
     def initButtonsAndCheckBoxes(self):
@@ -616,48 +623,75 @@ class MainWindow(QtWidgets.QMainWindow):
         QtWidgets.QApplication.quit()
 
     def convert_video(self):
-        total_checked = sum(self.model.item(row, self.COL_SELECT).checkState() == Qt.Checked for row in range(self.model.rowCount()))
+        total_checked = 0
+        for folder_row in range(self.model.rowCount()):
+            folder_item = self.model.item(folder_row)
+            for video_row in range(folder_item.rowCount()):
+                check_item = folder_item.child(video_row, self.COL_SELECT)
+                if check_item and check_item.checkState() == Qt.Checked:
+                    total_checked += 1
+
+        if total_checked == 0:
+            QMessageBox.information(self, "No Videos Selected", "Please select videos to convert.")
+            return
+
         current_checked = 0
+        for folder_row in range(self.model.rowCount()):
+            folder_item = self.model.item(folder_row)
+            for video_row in range(folder_item.rowCount()):
+                if self.is_video_selected(folder_item, video_row):  # Adjusted to check within folder
+                    current_checked += 1
+                    file_name = self.get_item_text(folder_item, video_row, self.COL_NAME)
+                    self.print_conversion_header(file_name, current_checked, total_checked)
 
-        for row in range(self.model.rowCount()):
-            check_item = self.model.item(row, self.COL_SELECT)  
-            if check_item.checkState() == Qt.Checked:
-                current_checked += 1
-                file_name = self.model.item(row, self.COL_NAME).text()
-                print("\n".join("=" * 80 for _ in range(9)))
-                print(f"================Processing {file_name} - {current_checked}/{total_checked}================")
-                print("\n".join("=" * 80 for _ in range(9)))
+                    try:
+                        self.process_video(folder_item, video_row)  # Adjusted to process within folder
+                    except Exception as e:
+                        print(f"Error processing {file_name}: {e}")
+                        continue
 
-                old_file_path = self.model.item(row, self.COL_FULL_FILE_PATH).text()
-                renamed_old_file_path = self.model.item(row, self.COL_RENAMED_OLD_FILE_NAME).text()
-
-                video_info = {
-                    'video_codec': self.model.item(row, self.COL_CODEC).text(),
-                    'dimensions': self.model.item(row, self.COL_DIMENSIONS).text(),
-                    'video_bitrate': self.model.item(row, self.COL_BIT_RATE).text(),
-                    'fps': self.model.item(row, self.COL_FPS).text(),
-                    'duration_str': self.model.item(row, self.COL_DURATION).text(),
-                    'size_mb': self.model.item(row, self.COL_SIZE_MB).text(),
-                    'rating': self.model.item(row, self.COL_RATING).text(),
-                }
-
-                force_hq = self.model.item(row, COL_FORCE_HQ).checkState() == Qt.Checked  # Checking Force HQ checkbox
-                export_settings = get_export_bitrate(video_info, force_hq)
-                print(export_settings)
-
-                new_file_path = convert_video_handbrake(old_file_path, export_settings)
-                copy_exif_data(old_file_path, new_file_path)
-                update_timestamp(old_file_path, new_file_path)
-
-                success = rename_with_rollback(old_file_path, renamed_old_file_path, new_file_path)
-                if success:
-                    print("Both renaming operations completed successfully.")
-                else:
-                    print("Renaming operations failed or partially failed.")
-        # After conversion is done, show a confirmation dialog
         self.show_completion_dialog()
 
+    def is_video_selected(self, folder_item, row):
+        check_item = folder_item.child(row, self.COL_SELECT)
+        return check_item and check_item.checkState() == Qt.Checked
 
+    def get_item_text(self, folder_item, row, column):
+        item = folder_item.child(row, column)
+        return item.text() if item else ""
+
+    def print_conversion_header(self, file_name, current, total):
+        header_line = "=" * 80
+        print(f"{header_line}\n{'=' * 29} Processing {file_name} - {current}/{total} {'=' * 29}\n{header_line}")
+
+    def process_video(self, folder_item, row):
+        # Retrieve the full file path from the folder item and row index
+        old_file_path = self.get_item_text(folder_item, row, self.COL_FULL_FILE_PATH)
+        renamed_old_file_path = self.get_item_text(folder_item, row, self.COL_RENAMED_OLD_FILE_NAME)
+        video_info = self.extract_video_info(folder_item, row)
+        force_hq = folder_item.child(row, self.COL_FORCE_HQ).checkState() == Qt.Checked
+
+
+        export_settings = get_export_bitrate(video_info, force_hq)
+        print(export_settings)
+
+        new_file_path = convert_video_handbrake(old_file_path, export_settings)
+        copy_exif_data(old_file_path, new_file_path)
+        update_timestamp(old_file_path, new_file_path)
+
+        success = rename_with_rollback(old_file_path, renamed_old_file_path, new_file_path)
+        print("Renaming operations completed successfully." if success else "Renaming operations failed or partially failed.")
+
+    def extract_video_info(self, folder_item, row):
+        return {
+            'video_codec': self.get_item_text(folder_item, row, self.COL_CODEC),
+            'dimensions': self.get_item_text(folder_item, row, self.COL_DIMENSIONS),
+            'video_bitrate': self.get_item_text(folder_item, row, self.COL_BIT_RATE),
+            'fps': self.get_item_text(folder_item, row, self.COL_FPS),
+            'duration_str': self.get_item_text(folder_item, row, self.COL_DURATION),
+            'size_mb': self.get_item_text(folder_item, row, self.COL_SIZE_MB),
+            'rating': self.get_item_text(folder_item, row, self.COL_RATING),
+        }
 
     def populate_tree(self, path):
         self.setup_tree_headers()
@@ -712,7 +746,27 @@ class MainWindow(QtWidgets.QMainWindow):
             for video in videos:
                 video_row_items = self.create_video_row_items(video)
                 folder_item.appendRow(video_row_items)
+    
+    def format_columns(self, video_row_items):
+        for col, item in enumerate(video_row_items):
+            # Apply bold font to certain columns
+            if col in [self.COL_RATING, self.COL_NEW_BIT_RATE, self.COL_EST_NEW_SIZE, self.COL_COMPRESSION_PERCENT, self.COL_BIT_RATE, self.COL_SIZE_MB]:
+                self.apply_bold_font(item)
 
+            # Apply color to certain columns
+            if col in [self.COL_NEW_BIT_RATE, self.COL_EST_NEW_SIZE, self.COL_COMPRESSION_PERCENT]:
+                item.setForeground(QBrush(QColor('green')))
+            elif col in [self.COL_BIT_RATE, self.COL_SIZE_MB]:
+                item.setForeground(QBrush(QColor('red')))
+
+            # Grey out certain columns
+            if col in [self.COL_DURATION, self.COL_DIMENSIONS, self.COL_FPS, self.COL_CODEC, self.COL_NEW_CODEC]:
+                item.setForeground(QBrush(QColor('grey')))
+
+    def apply_bold_font(self, item):
+        font = QFont()
+        font.setBold(True)
+        item.setFont(font)
 
     def create_video_row_items(self, video):
         video_info = get_video_info(video)
@@ -751,6 +805,10 @@ class MainWindow(QtWidgets.QMainWindow):
             QStandardItem(renamed_old_file_name), #remaining file name
             QStandardItem(video),# os.path.basename(video)), #full path
         ]
+        
+        # Apply formatting to the row items
+        self.format_columns(video_row_items)
+        
         return video_row_items
 
 if __name__ == '__main__':
@@ -758,65 +816,3 @@ if __name__ == '__main__':
     window = MainWindow()
     window.show()
     app.exec_()
-
-
-
-
-                # self.resizeColumnsBasedOnVideos() #TODO
-
-    # def resizeColumnsBasedOnVideos(self):
-    #     max_widths = [0] * self.model.columnCount()
-
-    #     for folder_row in range(self.model.rowCount()):
-    #         folder_item = self.model.item(folder_row)
-    #         for video_row in range(folder_item.rowCount()):
-    #             for column in range(self.model.columnCount()):
-    #                 video_item = folder_item.child(video_row, column)
-    #                 if video_item is not None:
-    #                     # Measure the width required for this item
-    #                     text = video_item.text()
-    #                     font_metrics = self.tree.fontMetrics()
-    #                     width = font_metrics.boundingRect(text).width()
-
-    #                     # Update the maximum width if necessary
-    #                     if width > max_widths[column]:
-    #                         max_widths[column] = width
-
-    #     # Resize each column to the maximum width found
-    #     for column, width in enumerate(max_widths):
-    #         self.tree.setColumnWidth(column, width + 10)  # Add a small buffer for padding
-
-
-
-
-
-
-
-                # base_name = os.path.splitext(os.path.basename(video))[0]
-                # old_file_name = f"{base_name}_OLD"
-
-                # if any(old_file_name in file for file in videos_list):
-                #     current_row = self.model.rowCount()
-                #     rows_to_grey_out.append((current_row - 1, old_file_name))
-
-            # # Grey out the necessary rows
-            # for row_index, old_file_name in rows_to_grey_out:
-            #     # Grey out the current file
-            #     for col in range(self.model.columnCount()):
-            #         item = self.model.item(row_index, col)
-            #         if item:  # Check if the item exists
-            #             item.setForeground(grey_brush)
-
-            #     # Grey out the _OLD file
-            #     for row in range(self.model.rowCount()):
-            #         item = self.model.item(row, 1)
-            #         if item and item.text().startswith(old_file_name):  # Check if the item exists and then check its text
-            #             for col in range(self.model.columnCount()):
-            #                 item = self.model.item(row, col)
-            #                 if item:  # Check if the item exists
-            #                     item.setForeground(grey_brush)
-
-
-    # def resize_columns(self):
-    #     for column in range(self.model.columnCount()):
-    #         self.tree.resizeColumnToContents(column)
