@@ -83,25 +83,29 @@ def update_timestamp(original_file, new_file):
     print(f"{os.path.basename(original_file)} create date is {create_date_str}")
 
     if create_date_str:
-        # Parse the 'Create Date' string into a datetime object
         try:
             create_date = datetime.datetime.strptime(create_date_str, '%Y:%m:%d %H:%M:%S')
-            # Update the creation date using SetFile
             formatted_date = create_date.strftime("%m/%d/%Y %H:%M:%S")
             setfile_command = ['SetFile', '-d', formatted_date, new_file]
             subprocess.run(setfile_command, check=True)
             print(f"'Create Date' set to: {formatted_date} based on EXIF DATA")
         except ValueError:
             print("Invalid EXIF 'Create Date'. Using fallback method.")
-            # Fallback method using touch -r
-            touch_command = ['touch', '-r', original_file, new_file]
-            subprocess.run(touch_command, check=True)
-            print(f"'Create Date' updated using touch -r from {original_file}")
+            # Fallback method using stat and SetFile
+            creation_date = subprocess.check_output(
+                ['stat', '-f', '%SB', '-t', '%m/%d/%Y %H:%M:%S', original_file]
+            ).decode().strip()
+            setfile_command = ['SetFile', '-d', creation_date, new_file]
+            subprocess.run(setfile_command, check=True)
+            print(f"'Create Date' updated to {creation_date} using stat and SetFile from {original_file}")
     else:
-        # Fallback to the original file's creation time using touch -r
-        touch_command = ['touch', '-r', original_file, new_file]
-        subprocess.run(touch_command, check=True)
-        print(f"EXIF data not found. 'Create Date' updated using touch -r from {original_file}")
+        # Fallback to the original file's creation time using stat and SetFile
+        creation_date = subprocess.check_output(
+            ['stat', '-f', '%SB', '-t', '%m/%d/%Y %H:%M:%S', original_file]
+        ).decode().strip()
+        setfile_command = ['SetFile', '-d', creation_date, new_file]
+        subprocess.run(setfile_command, check=True)
+        print(f"EXIF data not found. 'Create Date' updated to {creation_date} using stat and SetFile from {original_file}")
 
 
 def parse_videos_old(input_path):
@@ -166,8 +170,9 @@ def prompt_and_copy_exif():
     for new, old in videos_dict.items():
         counter += 1
         print(f"=====({counter}/{len(videos_dict)})===== Updating {os.path.basename(new)} using {os.path.basename(old)}")
-        copy_exif_data(old, new)
+        # copy_exif_data(old, new)
         update_timestamp(old, new)
 
 prompt_and_copy_exif()
 
+# update_timestamp("/Volumes/One Touch/Videos studio/1. Synced/1.1 Main videos/2022-04-30 Bali videos/DJI/DJI_0488_OLD.MP4", "/Volumes/One Touch/Videos studio/1. Synced/1.1 Main videos/2022-04-30 Bali videos/DJI/DJI_0488.MP4")
