@@ -160,8 +160,6 @@ def prompt_and_copy_exif():
     if os.path.isfile(input_path):
         input_path = os.path.dirname(input_path)
 
-    print(input_path)
-
     videos_dict = parse_videos_old(input_path)
 
     counter = 0

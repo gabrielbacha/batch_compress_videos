@@ -532,20 +532,22 @@ class MainWindow(QtWidgets.QMainWindow):
     COL_NAME = 0
     COL_SELECT = 1
     COL_FORCE_HQ = 2
-    COL_RATING = 3
-    COL_DURATION = 4
-    COL_DIMENSIONS = 5
-    COL_FPS = 6
-    COL_CODEC = 7
-    COL_BIT_RATE = 8
-    COL_SIZE_MB = 9
-    COL_NEW_CODEC = 10
-    COL_NEW_BIT_RATE = 11
-    COL_EST_NEW_SIZE = 12
-    COL_COMPRESSION_PERCENT = 13
-    COL_CONVERTED_FILE_NAME = 14
-    COL_RENAMED_OLD_FILE_NAME = 15
-    COL_FULL_FILE_PATH = 16
+    COL_INPUT_BITRATE = 3
+    COL_RATING = 4
+    COL_DURATION = 5
+    COL_DIMENSIONS = 6
+    COL_FPS = 7
+    COL_CODEC = 8
+    COL_BIT_RATE = 9
+    COL_SIZE_MB = 10
+    COL_NEW_CODEC = 11
+    COL_NEW_BIT_RATE = 12
+    COL_EST_NEW_SIZE = 13
+    COL_COMPRESSION_PERCENT = 14
+    COL_CONVERTED_FILE_NAME = 15
+    COL_RENAMED_OLD_FILE_NAME = 16
+    COL_FULL_FILE_PATH = 17
+
 
     def __init__(self):
         super().__init__()
@@ -755,6 +757,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         print(f"Error processing {file_name}: {e}")
                         continue
 
+        print("===========Conversion complete===========")
         self.show_completion_dialog()
 
     def is_video_selected(self, folder_item, row):
@@ -776,9 +779,15 @@ class MainWindow(QtWidgets.QMainWindow):
         video_info = self.extract_video_info(folder_item, row)
         force_hq = folder_item.child(row, self.COL_FORCE_HQ).checkState() == Qt.Checked
 
-
         export_settings = get_export_bitrate(video_info, force_hq)
-        print(export_settings)
+        
+        #Override bitrate
+        input_bitrate_item = folder_item.child(row, self.COL_INPUT_BITRATE)
+        input_bitrate = input_bitrate_item.text() if input_bitrate_item else ""
+        if input_bitrate.isdigit():
+            export_settings['new_bitrate'] = input_bitrate
+        
+        # print(export_settings)
 
         new_file_path = convert_video_handbrake(old_file_path, export_settings)
         copy_exif_data(old_file_path, new_file_path)
@@ -817,7 +826,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def setup_tree_headers(self):
         headers = [
-            'Name', 'Select', 'Force HQ', 'Rating',  'Duration', 'Dimensions', 'FPS',
+            'Name', 'Select', 'Force HQ', 'Input Bitrate', 'Rating',  'Duration', 'Dimensions', 'FPS',
             'Codec', 'Bit Rate', 'Size (MB)', 'New Codec', 'New Bit Rate',
             'Est. New Size', 'Compression %', 'Converted File Name', 
             'Renamed Old File Name', 'Full File Path'
@@ -953,12 +962,16 @@ class MainWindow(QtWidgets.QMainWindow):
         item_force_hq.setCheckable(True)
         item_force_hq.setCheckState(Qt.Unchecked)
 
+        item_input_bitrate = QStandardItem()  # Create an empty item for input bitrate
+        item_input_bitrate.setEditable(True)  # Make the item editable
+
         # Populate the row with all the necessary items
         video_row_items = [
                         
             QStandardItem(os.path.basename(video)), #filename
             item_select,
             item_force_hq, #force HQ
+            item_input_bitrate,  # input bitrate
             QStandardItem(str(video_info['rating'])), #rating
             QStandardItem(video_info['duration_str'].split('.')[0]), #duration
             QStandardItem(video_info['dimensions']), #dimensions
