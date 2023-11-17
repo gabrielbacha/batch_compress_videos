@@ -430,6 +430,81 @@ import json
 import sys
 import subprocess
 
+def resize_window(window):
+    # Obtain the size of the screen
+    screen = QtWidgets.QApplication.primaryScreen().geometry()
+
+    # Calculate 80% of the screen width and convert to integer
+    width = int(screen.width() * 0.8)
+    height = int(screen.height() * 0.6)  # You can choose to keep the current height or set your own
+
+    # Set the window size with integer width and height
+    window.resize(width, height)
+
+def centerWindowOnScreen(window):
+    # Centers the window on the screen
+    centerPoint = QtWidgets.QApplication.desktop().availableGeometry().center()
+    frameGm = window.frameGeometry()
+    frameGm.moveCenter(centerPoint)
+    window.move(frameGm.topLeft())
+
+class SubfolderSelectionDialog(QDialog):
+    def __init__(self, root_folder, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Select Subfolders")
+        resize_window(self)
+        centerWindowOnScreen(self)     
+
+        self.treeView = QTreeView(self)
+        self.treeView.setHeaderHidden(False)
+        self.treeView.setAlternatingRowColors(True)
+
+
+        self.model = QStandardItemModel()
+        self.model.setHorizontalHeaderLabels(["Select", "Folder Name", "Full Path"])
+
+        self.populate_tree(root_folder)
+
+        self.treeView.setModel(self.model)
+        self.treeView.expandAll()
+        self.treeView.resizeColumnToContents(0)  
+        self.treeView.resizeColumnToContents(1)  
+        self.treeView.resizeColumnToContents(2)  
+
+        buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
+        buttonBox.accepted.connect(self.accept)
+        buttonBox.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.treeView)
+        layout.addWidget(buttonBox)
+
+    def populate_tree(self, root_folder):
+        self.add_folder_item(root_folder, checked=True)  # Optionally set checked=True to pre-select the root
+        
+        subfolders = [os.path.join(root_folder, name) for name in os.listdir(root_folder)
+                      if os.path.isdir(os.path.join(root_folder, name))]
+
+        for folder in subfolders:
+            self.add_folder_item(folder)
+
+    def add_folder_item(self, folder_path, checked=False):
+        select_item = QStandardItem()
+        select_item.setCheckable(True)
+        select_item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+
+        folder_name_item = QStandardItem(os.path.basename(folder_path))
+        full_path_item = QStandardItem(folder_path)
+
+        self.model.appendRow([select_item, folder_name_item, full_path_item])
+
+    def selectedFolders(self):
+        selected_folders = []
+        for row in range(self.model.rowCount()):
+            if self.model.item(row, 0).checkState() == Qt.Checked:
+                selected_folders.append(self.model.item(row, 2).text())
+        return selected_folders
+
 class MainWindow(QtWidgets.QMainWindow):
     COL_NAME = 0
     COL_SELECT = 1
@@ -457,8 +532,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.initTree()
         self.initButtonsAndCheckBoxes()
         self.setupLayout()
-        self.resize_window()
-        self.centerWindowOnScreen()
+        resize_window(self)
+        centerWindowOnScreen(self)
 
     def initTree(self):
         self.tree = QTreeView()
@@ -477,7 +552,7 @@ class MainWindow(QtWidgets.QMainWindow):
             for folder in selected_folders:
                 self.populate_tree(folder)  # Assuming populate_tree can handle individual folders
         
-        # Auto-size the first column
+        # Auto-size columns
         self.tree.resizeColumnToContents(self.COL_NAME)  
         self.tree.resizeColumnToContents(self.COL_CONVERTED_FILE_NAME)  
         self.tree.resizeColumnToContents(self.COL_RENAMED_OLD_FILE_NAME)  
@@ -516,23 +591,7 @@ class MainWindow(QtWidgets.QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
-    def resize_window(self):
-        # Obtain the size of the screen
-        screen = QtWidgets.QApplication.primaryScreen().geometry()
 
-        # Calculate 80% of the screen width and convert to integer
-        width = int(screen.width() * 0.8)
-        height = int(screen.height() * 0.6)  # You can choose to keep the current height or set your own
-
-        # Set the window size with integer width and height
-        self.resize(width, height)
-
-    def centerWindowOnScreen(self):
-        # Centers the window on the screen
-        centerPoint = QtWidgets.QApplication.desktop().availableGeometry().center()
-        frameGm = self.frameGeometry()
-        frameGm.moveCenter(centerPoint)
-        self.move(frameGm.topLeft())
 
     def get_directory_path(self):
         ##Logic to save the last used directory
@@ -562,32 +621,11 @@ class MainWindow(QtWidgets.QMainWindow):
             return None
         
     def get_subfolder_selection(self, root_folder):
-        # Parse all subfolders in the root folder
-        subfolders = [os.path.join(root_folder, name) for name in os.listdir(root_folder) 
-                    if os.path.isdir(os.path.join(root_folder, name))]
-
-        # Create a dialog with checkboxes for each subfolder
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Select Folders")
-        layout = QVBoxLayout(dialog)
-
-        checkboxes = []
-        for folder in subfolders:
-            cb = QCheckBox(os.path.basename(folder), dialog)
-            cb.folderPath = folder  # Store the folder path in the checkbox
-            checkboxes.append(cb)
-            layout.addWidget(cb)
-
-        buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
-        layout.addWidget(buttonBox)
-        buttonBox.accepted.connect(dialog.accept)
-        buttonBox.rejected.connect(dialog.reject)
-
-        selected_folders = []
+        dialog = SubfolderSelectionDialog(root_folder, self)
         if dialog.exec_() == QDialog.Accepted:
-            selected_folders = [cb.folderPath for cb in checkboxes if cb.isChecked()]
-
-        return selected_folders
+            return dialog.selectedFolders()
+        else:
+            return []
 
     
     def selectAllChanged(self, state):
