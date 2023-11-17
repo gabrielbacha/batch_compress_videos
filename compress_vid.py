@@ -707,6 +707,12 @@ class MainWindow(QtWidgets.QMainWindow):
             if item is not None and item.isCheckable() and not self.is_item_greyed_out(item):
                 item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
 
+    def apply_bitrate_to_folder(self, folder_item, bitrate):
+        for row in range(folder_item.rowCount()):
+            video_row_item = folder_item.child(row, self.COL_INPUT_BITRATE)
+            if video_row_item and video_row_item.isEditable():
+                video_row_item.setText(bitrate)
+    
     def onItemChanged(self, item):
     # Check if the changed item is a folder-level checkbox
         if item.column() in [self.COL_SELECT, self.COL_FORCE_HQ]:
@@ -716,6 +722,10 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.select_all_for_folder(folder_item, item.checkState())
                 elif item.column() == self.COL_FORCE_HQ:
                     self.force_hq_all_for_folder(folder_item, item.checkState())
+        if item.column() == self.COL_INPUT_BITRATE:
+            folder_item = item.data(Qt.UserRole)
+            if folder_item:  # Check if this is a folder-level change
+                self.apply_bitrate_to_folder(folder_item, item.text())
     
     def showInFinder(self):
         # Logic to open the selected directory in Finder or File Explorer
@@ -871,10 +881,16 @@ class MainWindow(QtWidgets.QMainWindow):
             force_hq_all_item.setCheckable(True)
             force_hq_all_item.setCheckState(Qt.Unchecked)
 
+            # Add folder item to the data of input bitrate item
+            item_input_bitrate = QStandardItem()
+            item_input_bitrate.setEditable(True)
+            item_input_bitrate.setData(folder_item, Qt.UserRole)  # Linking to parent folder
+
             folder_row_items = [
                 folder_item,  # Folder name
                 select_all_item,  # Select All checkbox
-                force_hq_all_item  # Force HQ All checkbox
+                force_hq_all_item,  # Force HQ All checkbox
+                item_input_bitrate,  # input bitrate item
             ]
             
             # Store the folder item in the checkbox items for later reference
