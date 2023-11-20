@@ -66,15 +66,43 @@ def get_video_info(input_path):
     except subprocess.CalledProcessError as e:
         print(f"Error: {e.output.decode('utf-8')}")
         output = ['h264', '1', '1', '1/1', '1', '1', '1']
+    default_output = ['h264', '1', '1', '1/1', '1', '1', '1']
 
     # Extracting the information from the output
-    video_codec = output[0]
-    width = output[1]
-    height = output[2]
-    bitrate = output[4]
-    fps_frac = output[3]
-    duration = float(output[5])
-    file_size = output[6]  # Corrected file size index
+    try:
+        video_codec = output[0]
+    except IndexError:
+        video_codec = default_output[0]
+
+    try:
+        width = int(output[1])  # Convert to integer
+    except (IndexError, ValueError):  # Catch both index and value errors
+        width = int(default_output[1])  # Use default value if error occurs
+
+    try:
+        height = int(output[2])  # Convert to integer
+    except (IndexError, ValueError):  # Catch both index and value errors
+        height = int(default_output[2])  # Use default value if error occurs
+
+    try:
+        fps_frac = output[3]
+    except IndexError:
+        fps_frac = default_output[3]
+
+    try:
+        bitrate = output[4]
+    except IndexError:
+        bitrate = default_output[4]
+
+    try:
+        duration = float(output[5])
+    except (IndexError, ValueError):
+        duration = float(default_output[5])
+
+    try:
+        file_size = output[6]
+    except IndexError:
+        file_size = default_output[6]
 
     # Calculating FPS from the fractional representation
     fps = "N/A"
@@ -95,7 +123,7 @@ def get_video_info(input_path):
         video_bitrate = round(int(bitrate) / 1e6, 1)
 
     # Formatting file size as MB
-    size_mb = round(int(file_size) / 1e6, 1)
+    size_mb = round(float(file_size) / 1e6, 1)
 
     # Formatting duration as HH:MM:SS
     duration_str = str(datetime.timedelta(seconds=duration))
@@ -198,8 +226,11 @@ def bitrate_to_size(duration_str, bitrate_mbps):
     The bitrate_mbps is expected to be in Mbps.
     """
     # Convert HH:MM:SS to total seconds
-    hours, minutes, seconds = map(float, duration_str.split(':'))
-    total_seconds = hours * 3600 + minutes * 60 + seconds
+    try:
+        hours, minutes, seconds = map(float, duration_str.split(':'))
+        total_seconds = hours * 3600 + minutes * 60 + seconds
+    except:
+        total_seconds = 1
     
     # Calculate the estimated file size in MB
     if bitrate_mbps != "N/A":
@@ -902,9 +933,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self.tree.expand(folder_index)  # Expands the folder row
 
             video_counter = 0
+            print(f"==={os.path.basename(os.path.dirname(folder))}===")
+            print(f"==={os.path.basename(folder)}===")
             for video in videos:
                 video_counter += 1
-                print(f"Video {video_counter} / {len(videos)}")
+                print(f"Video {video_counter} / {len(videos)} - {os.path.basename(video)}")
                 video_row_items = self.create_video_row_items(video)
                 folder_item.appendRow(video_row_items)
     
