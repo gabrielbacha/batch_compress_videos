@@ -33,7 +33,7 @@ def get_video_info(input_path):
         '-of', 'default=noprint_wrappers=1:nokey=1',
         input_path
     ]
-    print("Pulling video information...")
+    # print("Pulling video information...")
     # print(" ".join(cmd))
 
     # Execute the ffprobe command
@@ -150,7 +150,7 @@ def get_video_info(input_path):
 
 def get_export_bitrate(video_info, force_hq=False):
     # Use the get_video_info function to get video parameters
-    print("Getting export settings...")
+    # print("Getting export settings...")
     try:
         dimensions = video_info['dimensions']
         fps = video_info['fps']
@@ -241,7 +241,7 @@ def bitrate_to_size(duration_str, bitrate_mbps):
     return round(file_size_mb, 2) if file_size_mb != "N/A" else file_size_mb
 
 def estimate_new_file_size(video_info, export_settings):
-    print("Estimating new file size...")
+    # print("Estimating new file size...")
 
     duration_str = video_info['duration_str']
     size_mb = video_info['size_mb']
@@ -662,15 +662,15 @@ class MainWindow(QtWidgets.QMainWindow):
         # Auto-size columns
         self.tree.resizeColumnToContents(self.COL_NAME)  
         self.tree.setColumnWidth(self.COL_NAME, int(self.tree.columnWidth(self.COL_NAME)*0.65))
-        self.tree.setColumnWidth(self.COL_SELECT, int(self.tree.columnWidth(self.COL_NAME)*0.65))
-        self.tree.setColumnWidth(self.COL_FORCE_HQ, int(self.tree.columnWidth(self.COL_NAME)*0.65))
-        self.tree.setColumnWidth(self.COL_INPUT_BITRATE, int(self.tree.columnWidth(self.COL_NAME)*0.65))
-        self.tree.setColumnWidth(self.COL_RATING, int(self.tree.columnWidth(self.COL_NAME)*0.65))
-        self.tree.setColumnWidth(self.COL_FPS, int(self.tree.columnWidth(self.COL_NAME)*0.65))
-        self.tree.setColumnWidth(self.COL_BIT_RATE, int(self.tree.columnWidth(self.COL_NAME)*0.65))
-        self.tree.setColumnWidth(self.COL_NEW_BIT_RATE, int(self.tree.columnWidth(self.COL_NAME)*0.65))
-        self.tree.setColumnWidth(self.COL_CODEC, int(self.tree.columnWidth(self.COL_NAME)*0.65))
-        self.tree.setColumnWidth(self.COL_NEW_CODEC, int(self.tree.columnWidth(self.COL_NAME)*0.65))
+        self.tree.setColumnWidth(self.COL_SELECT, int(self.tree.columnWidth(self.COL_SELECT)*0.65))
+        self.tree.setColumnWidth(self.COL_FORCE_HQ, int(self.tree.columnWidth(self.COL_FORCE_HQ)*0.65))
+        self.tree.setColumnWidth(self.COL_INPUT_BITRATE, int(self.tree.columnWidth(self.COL_INPUT_BITRATE)*0.65))
+        self.tree.setColumnWidth(self.COL_RATING, int(self.tree.columnWidth(self.COL_RATING)*0.65))
+        self.tree.setColumnWidth(self.COL_FPS, int(self.tree.columnWidth(self.COL_FPS)*0.65))
+        self.tree.setColumnWidth(self.COL_BIT_RATE, int(self.tree.columnWidth(self.COL_BIT_RATE)*0.65))
+        self.tree.setColumnWidth(self.COL_NEW_BIT_RATE, int(self.tree.columnWidth(self.COL_NEW_BIT_RATE)*0.65))
+        self.tree.setColumnWidth(self.COL_CODEC, int(self.tree.columnWidth(self.COL_CODEC)*0.65))
+        self.tree.setColumnWidth(self.COL_NEW_CODEC, int(self.tree.columnWidth(self.COL_NEW_CODEC)*0.65))
 
         self.tree.resizeColumnToContents(self.COL_CONVERTED_FILE_NAME)  
         self.tree.resizeColumnToContents(self.COL_RENAMED_OLD_FILE_NAME)  
@@ -971,6 +971,7 @@ class MainWindow(QtWidgets.QMainWindow):
         return folder_structure
 
     def populate_folders(self, folder_structure):
+        folder_counter = 0
         for folder, videos in folder_structure.items():
             folder_item = QStandardItem(os.path.basename(folder))
 
@@ -1005,8 +1006,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self.tree.expand(folder_index)  # Expands the folder row
 
             video_counter = 0
+            folder_counter += 1
             print(f"==={os.path.basename(os.path.dirname(folder))}===")
-            print(f"==={os.path.basename(folder)}===")
+            print(f"===({folder_counter} / {len(folder_structure)})==={os.path.basename(folder)}===")
             for video in videos:
                 video_counter += 1
                 print(f"Video {video_counter} / {len(videos)} - {os.path.basename(video)}")
