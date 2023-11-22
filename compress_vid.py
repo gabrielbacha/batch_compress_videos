@@ -124,8 +124,14 @@ def get_video_info(input_path):
         # Handle error if exiftool failed
         print("Error: exiftool did not complete successfully.")
         return None
+    
+    # Get the file's last modification time
+    modification_time = os.path.getmtime(input_path)
 
-     # Constructing the dictionary with the video information
+    # Convert the timestamp to a human-readable format
+    date_modified = datetime.datetime.fromtimestamp(modification_time).strftime('%-d %b %Y')
+
+    # Constructing the dictionary with the video information
     video_info = {
         'video_codec': video_codec,
         'dimensions': dimensions,
@@ -133,7 +139,8 @@ def get_video_info(input_path):
         'fps': fps,
         'duration_str': duration_str,
         'size_mb': size_mb,
-        'rating': rating
+        'rating': rating,
+        'date_modified': date_modified
     }
 
     # Returning the constructed dictionary
@@ -577,12 +584,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 'Input Bitrate', 
                 'Rating', 
                 'FPS', 
+                'Dimensions', 
                 'Bit Rate', 
                 'Size (MB)', 
-                'Dimensions', 
                 'New Bit Rate', 
                 'Est. New Size', 
                 'Compression %', 
+                'Date Modified',
                 'Duration', 
                 'Codec', 
                 'New Codec', 
@@ -611,7 +619,8 @@ class MainWindow(QtWidgets.QMainWindow):
         'Compression %': 'COL_COMPRESSION_PERCENT',
         'Converted File Name': 'COL_CONVERTED_FILE_NAME',
         'Renamed Old File Name': 'COL_RENAMED_OLD_FILE_NAME',
-        'Full File Path': 'COL_FULL_FILE_PATH'
+        'Full File Path': 'COL_FULL_FILE_PATH',
+        'Date Modified': 'COL_DATE_MODIFIED',
     }
 
 
@@ -653,6 +662,15 @@ class MainWindow(QtWidgets.QMainWindow):
         # Auto-size columns
         self.tree.resizeColumnToContents(self.COL_NAME)  
         self.tree.setColumnWidth(self.COL_NAME, int(self.tree.columnWidth(self.COL_NAME)*0.65))
+        self.tree.setColumnWidth(self.COL_SELECT, int(self.tree.columnWidth(self.COL_NAME)*0.65))
+        self.tree.setColumnWidth(self.COL_FORCE_HQ, int(self.tree.columnWidth(self.COL_NAME)*0.65))
+        self.tree.setColumnWidth(self.COL_INPUT_BITRATE, int(self.tree.columnWidth(self.COL_NAME)*0.65))
+        self.tree.setColumnWidth(self.COL_RATING, int(self.tree.columnWidth(self.COL_NAME)*0.65))
+        self.tree.setColumnWidth(self.COL_FPS, int(self.tree.columnWidth(self.COL_NAME)*0.65))
+        self.tree.setColumnWidth(self.COL_BIT_RATE, int(self.tree.columnWidth(self.COL_NAME)*0.65))
+        self.tree.setColumnWidth(self.COL_NEW_BIT_RATE, int(self.tree.columnWidth(self.COL_NAME)*0.65))
+        self.tree.setColumnWidth(self.COL_CODEC, int(self.tree.columnWidth(self.COL_NAME)*0.65))
+        self.tree.setColumnWidth(self.COL_NEW_CODEC, int(self.tree.columnWidth(self.COL_NAME)*0.65))
 
         self.tree.resizeColumnToContents(self.COL_CONVERTED_FILE_NAME)  
         self.tree.resizeColumnToContents(self.COL_RENAMED_OLD_FILE_NAME)  
@@ -927,6 +945,7 @@ class MainWindow(QtWidgets.QMainWindow):
             'duration_str': self.get_item_text(folder_item, row, self.COL_DURATION),
             'size_mb': self.get_item_text(folder_item, row, self.COL_SIZE_MB),
             'rating': self.get_item_text(folder_item, row, self.COL_RATING),
+            'date_modified': self.get_item_text(folder_item, row, self.COL_DATE_MODIFIED),
         }
 
     def populate_tree(self, path):
@@ -1102,7 +1121,8 @@ class MainWindow(QtWidgets.QMainWindow):
             'Compression %': QStandardItem(converted_file_data['compression_ratio']),
             'Converted File Name': QStandardItem(converted_file_name),
             'Renamed Old File Name': QStandardItem(renamed_old_file_name),
-            'Full File Path': QStandardItem(video)
+            'Full File Path': QStandardItem(video),
+            'Date Modified': QStandardItem(video_info['date_modified']),
         }
 
         # Create video_row_items list using the order in headers_mapping
