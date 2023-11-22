@@ -4,46 +4,22 @@ import os
 
 ffmpeg_settings = {
     '4k': {
-        '30': {
-            'vt_h265': {
-                'LQ': '25',
-                'HQ': '60'
-            },
-        },
-        '60': {
-            'vt_h265': {
-                'LQ': '30',
-                'HQ': '70'
-            },
-        },
-        '120': {
-            'vt_h265': {
-                'LQ': '50',  # These are hypothetical values
-                'HQ': '100'  # Adjust them as per the actual quality settings required
-            },
-        },
+        '30': {'vt_h265': { 'LQ': '25', 'HQ': '60' }, },
+        '60': {'vt_h265': { 'LQ': '30', 'HQ': '70' }, },
+        '120': {'vt_h265': { 'LQ': '50', 'HQ': '100' }, },
+    },
+    '2.7k': { 
+        '30': {'vt_h265': {'LQ': '16', 'HQ': '37' }, },
+        '60': {'vt_h265': { 'LQ': '20', 'HQ': '45' }, },
+        '120': {'vt_h265': { 'LQ': '35', 'HQ': '70' }, },
     },
     '1080p': {
-        '30': {
-            'vt_h265': {
-                'LQ': '8',
-                'HQ': '15'
-            },
-        },
-        '60': {
-            'vt_h265': {
-                'LQ': '10',
-                'HQ': '20'
-            },
-        },
-        '120': {
-            'vt_h265': {
-                'LQ': '20',  # These are hypothetical values
-                'HQ': '40'   # Adjust them as per the actual quality settings required
-            },
-        },
+        '30': {'vt_h265': {'LQ': '8','HQ': '15' }, },
+        '60': {'vt_h265': { 'LQ': '10', 'HQ': '20' }, },
+        '120': {'vt_h265': { 'LQ': '20', 'HQ': '40' }, },
     }
 }
+
 
 def get_video_info(input_path):
     ## FFPROBE INFO
@@ -191,12 +167,29 @@ def get_export_bitrate(video_info, force_hq=False):
         # If it's not a number, keep the default quality
         pass
     
-    # Determine resolution based on dimensions
+    # Define standard dimensions
+    WIDTH_4K, HEIGHT_4K = 3840, 2160
+    WIDTH_2_7K, HEIGHT_2_7K = 2704, 1520
+    WIDTH_1080P, HEIGHT_1080P = 1920, 1080
+
+    # Define tolerance
+    TOLERANCE = 0.10  # 10%
+
+    # Input dimensions
     width, height = map(int, dimensions.split('x'))
     resolution = None
-    if (width >= 3840 and height >= 2160) or (width >= 2160 and height >= 3840):  # Handling both landscape and portrait 4K
+
+    # Check for 4K with tolerance
+    if ((WIDTH_4K * (1 - TOLERANCE)) <= width <= (WIDTH_4K * (1 + TOLERANCE)) and (HEIGHT_4K * (1 - TOLERANCE)) <= height <= (HEIGHT_4K * (1 + TOLERANCE))) or \
+    ((HEIGHT_4K * (1 - TOLERANCE)) <= width <= (HEIGHT_4K * (1 + TOLERANCE)) and (WIDTH_4K * (1 - TOLERANCE)) <= height <= (WIDTH_4K * (1 + TOLERANCE))):
         resolution = '4k'
-    elif (width >= 1920 and height >= 1080) or (width >= 1080 and height >= 1920):  # Handling both landscape and portrait 1080p
+    # Check for 2.7K with tolerance
+    elif ((WIDTH_2_7K * (1 - TOLERANCE)) <= width <= (WIDTH_2_7K * (1 + TOLERANCE)) and (HEIGHT_2_7K * (1 - TOLERANCE)) <= height <= (HEIGHT_2_7K * (1 + TOLERANCE))) or \
+        ((HEIGHT_2_7K * (1 - TOLERANCE)) <= width <= (HEIGHT_2_7K * (1 + TOLERANCE)) and (WIDTH_2_7K * (1 - TOLERANCE)) <= height <= (WIDTH_2_7K * (1 + TOLERANCE))):
+        resolution = '2.7k'
+    # Check for 1080p with tolerance
+    elif ((WIDTH_1080P * (1 - TOLERANCE)) <= width <= (WIDTH_1080P * (1 + TOLERANCE)) and (HEIGHT_1080P * (1 - TOLERANCE)) <= height <= (HEIGHT_1080P * (1 + TOLERANCE))) or \
+        ((HEIGHT_1080P * (1 - TOLERANCE)) <= width <= (HEIGHT_1080P * (1 + TOLERANCE)) and (WIDTH_1080P * (1 - TOLERANCE)) <= height <= (WIDTH_1080P * (1 + TOLERANCE))):
         resolution = '1080p'
 
     # Round fps to the nearest whole number to match against '30' or '60', 24 & 25 are considered 30
@@ -213,7 +206,7 @@ def get_export_bitrate(video_info, force_hq=False):
             }
     except:
         export_settings = {
-            "new_bitrate": "1",
+            "new_bitrate": "999",
             "new_codec": "vt_h265"
             }
     #new codec no-longer needed, defined in convert_selected_video
@@ -485,7 +478,7 @@ def rename_with_rollback(original_file_path, intermediate_file_path, final_file_
 
 
 from PyQt5 import QtWidgets, QtCore
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeView, QPushButton, QFileDialog, QMessageBox, QDialog, QVBoxLayout, QCheckBox, QDialogButtonBox 
+from PyQt5.QtWidgets import QMenu, QApplication, QMainWindow, QTreeView, QPushButton, QFileDialog, QMessageBox, QDialog, QVBoxLayout, QCheckBox, QDialogButtonBox 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor, QFont
 import os
@@ -497,9 +490,9 @@ def resize_window(window):
     # Obtain the size of the screen
     screen = QtWidgets.QApplication.primaryScreen().geometry()
 
-    # Calculate 80% of the screen width and convert to integer
-    width = int(screen.width() * 0.8)
-    height = int(screen.height() * 0.6)  # You can choose to keep the current height or set your own
+    # Calculate 90% of the screen width and convert to integer
+    width = int(screen.width() * 0.9)
+    height = int(screen.height() * 0.7)  # You can choose to keep the current height or set your own
 
     # Set the window size with integer width and height
     window.resize(width, height)
@@ -576,28 +569,58 @@ class SubfolderSelectionDialog(QDialog):
 
 
 class MainWindow(QtWidgets.QMainWindow):
-    COL_NAME = 0
-    COL_SELECT = 1
-    COL_FORCE_HQ = 2
-    COL_INPUT_BITRATE = 3
-    COL_RATING = 4
-    COL_DURATION = 5
-    COL_DIMENSIONS = 6
-    COL_FPS = 7
-    COL_CODEC = 8
-    COL_BIT_RATE = 9
-    COL_SIZE_MB = 10
-    COL_NEW_CODEC = 11
-    COL_NEW_BIT_RATE = 12
-    COL_EST_NEW_SIZE = 13
-    COL_COMPRESSION_PERCENT = 14
-    COL_CONVERTED_FILE_NAME = 15
-    COL_RENAMED_OLD_FILE_NAME = 16
-    COL_FULL_FILE_PATH = 17
+    
+    headers_order = [
+                'Name', 
+                'Select', 
+                'Force HQ', 
+                'Input Bitrate', 
+                'Rating', 
+                'FPS', 
+                'Bit Rate', 
+                'Size (MB)', 
+                'Dimensions', 
+                'New Bit Rate', 
+                'Est. New Size', 
+                'Compression %', 
+                'Duration', 
+                'Codec', 
+                'New Codec', 
+                'Converted File Name', 
+                'Renamed Old File Name', 
+                'Full File Path'
+            ]
+
+    COL_NAME = COL_SELECT = COL_FORCE_HQ = COL_INPUT_BITRATE = COL_RATING = COL_DURATION = COL_DIMENSIONS = COL_FPS = COL_CODEC = COL_BIT_RATE = COL_SIZE_MB = COL_NEW_CODEC = COL_NEW_BIT_RATE = COL_EST_NEW_SIZE = COL_COMPRESSION_PERCENT = COL_CONVERTED_FILE_NAME = COL_RENAMED_OLD_FILE_NAME = COL_FULL_FILE_PATH = None
+
+    headers_mapping = {
+        'Name': 'COL_NAME',
+        'Select': 'COL_SELECT',
+        'Force HQ': 'COL_FORCE_HQ',
+        'Input Bitrate': 'COL_INPUT_BITRATE',
+        'Rating': 'COL_RATING',
+        'Duration': 'COL_DURATION',
+        'Dimensions': 'COL_DIMENSIONS',
+        'FPS': 'COL_FPS',
+        'Codec': 'COL_CODEC',
+        'Bit Rate': 'COL_BIT_RATE',
+        'Size (MB)': 'COL_SIZE_MB',
+        'New Codec': 'COL_NEW_CODEC',
+        'New Bit Rate': 'COL_NEW_BIT_RATE',
+        'Est. New Size': 'COL_EST_NEW_SIZE',
+        'Compression %': 'COL_COMPRESSION_PERCENT',
+        'Converted File Name': 'COL_CONVERTED_FILE_NAME',
+        'Renamed Old File Name': 'COL_RENAMED_OLD_FILE_NAME',
+        'Full File Path': 'COL_FULL_FILE_PATH'
+    }
+
 
 
     def __init__(self):
         super().__init__()
+        # Dynamically assign column constants based on the order in headers_order
+        for index, header in enumerate(self.headers_order):
+            setattr(self, self.headers_mapping[header], index)
         self.initUI()
 
     def initUI(self):
@@ -629,12 +652,44 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # Auto-size columns
         self.tree.resizeColumnToContents(self.COL_NAME)  
+        self.tree.setColumnWidth(self.COL_NAME, int(self.tree.columnWidth(self.COL_NAME)*0.65))
+
         self.tree.resizeColumnToContents(self.COL_CONVERTED_FILE_NAME)  
         self.tree.resizeColumnToContents(self.COL_RENAMED_OLD_FILE_NAME)  
         self.tree.resizeColumnToContents(self.COL_FULL_FILE_PATH)  
         
         #Sort by column
         self.tree.sortByColumn(self.COL_NAME, Qt.AscendingOrder)
+
+        #Context menu
+        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self.openContextMenu)
+
+    def openContextMenu(self, position):
+        indexes = self.tree.selectedIndexes()
+        if indexes:
+            menu = QMenu()
+            show_in_finder_action = menu.addAction("Show in Finder")
+            action = menu.exec_(self.tree.viewport().mapToGlobal(position))
+            if action == show_in_finder_action:
+                self.showSelectedInFinder(indexes[0])  # Assumes first column has the full path or modify as needed
+
+    def showSelectedInFinder(self, index):
+        if index.isValid():
+            file_path_item = self.model.itemFromIndex(index.sibling(index.row(), self.COL_FULL_FILE_PATH))
+            if file_path_item:
+                file_path = file_path_item.text()
+                if file_path and os.path.exists(file_path):
+                    if sys.platform == "darwin":
+                        subprocess.run(["open", "-R", file_path])
+                    elif sys.platform == "win32":
+                        subprocess.run(["explorer", "/select,", file_path])
+                    else:
+                        subprocess.run(["xdg-open", os.path.dirname(file_path)])
+                else:
+                    print("File path item not found.")
+
+
 
     def initButtonsAndCheckBoxes(self):
         self.printButton = QPushButton("Convert selected videos", self)
@@ -763,7 +818,7 @@ class MainWindow(QtWidgets.QMainWindow):
         directory = self.get_directory_path()  # Assuming this method returns the selected directory path
         if directory:
             if sys.platform == "darwin":
-                subprocess.run(["open", directory])
+                subprocess.run(["open", "-R",  directory])
             elif sys.platform == "win32":
                 subprocess.run(["explorer", directory])
             else:  # Linux and other OS
@@ -879,15 +934,13 @@ class MainWindow(QtWidgets.QMainWindow):
         folder_structure = self.build_folder_structure(path)
         self.populate_folders(folder_structure)
         # Grey out old versions
-        self.update_row_styles()
+        self.grey_out_rows()
 
     def setup_tree_headers(self):
-        headers = [
-            'Name', 'Select', 'Force HQ', 'Input Bitrate', 'Rating',  'Duration', 'Dimensions', 'FPS',
-            'Codec', 'Bit Rate', 'Size (MB)', 'New Codec', 'New Bit Rate',
-            'Est. New Size', 'Compression %', 'Converted File Name', 
-            'Renamed Old File Name', 'Full File Path'
-        ]
+        # Create headers list using the order in headers_order
+        headers = [header for header in self.headers_order]
+
+        # Set the model's header labels
         self.model.setHorizontalHeaderLabels(headers)
 
     def build_folder_structure(self, path):
@@ -962,7 +1015,7 @@ class MainWindow(QtWidgets.QMainWindow):
         font.setBold(True)
         item.setFont(font)
 
-    def update_row_styles(self):
+    def grey_out_rows(self):
         grey_brush = QBrush(QColor('grey'))
         font = QFont()
         font = QFont()
@@ -1030,30 +1083,31 @@ class MainWindow(QtWidgets.QMainWindow):
         item_input_bitrate = QStandardItem()  # Create an empty item for input bitrate
         item_input_bitrate.setEditable(True)  # Make the item editable
 
-        # Populate the row with all the necessary items
-        video_row_items = [
-                        
-            QStandardItem(os.path.basename(video)), #filename
-            item_select,
-            item_force_hq, #force HQ
-            item_input_bitrate,  # input bitrate
-            QStandardItem(str(video_info['rating'])), #rating
-            QStandardItem(video_info['duration_str'].split('.')[0]), #duration
-            QStandardItem(video_info['dimensions']), #dimensions
-            QStandardItem(str(video_info['fps'])), #fps
-            QStandardItem(video_info['video_codec']), #current codec
-            QStandardItem(str(video_info['video_bitrate'])), #current bitrate
-            QStandardItem(f"{video_info['size_mb']} MB"), #current size
-            QStandardItem(export_settings['new_codec']), #new codec
-            QStandardItem(str(export_settings['new_bitrate'])), #new bitrate
-            QStandardItem(str(f'{new_file_size} MB')), #new size
-            QStandardItem(converted_file_data['compression_ratio']), #compression ratio
-            QStandardItem(converted_file_name), # new file name
-            QStandardItem(renamed_old_file_name), #remaining file name
-            QStandardItem(video),# os.path.basename(video)), #full path
-        ]
-        
-        # Apply formatting to the row items
+        # Define a dictionary to map headers to the corresponding QStandardItem creation logic
+        header_to_item = {
+            'Name': QStandardItem(os.path.basename(video)),
+            'Select': item_select,
+            'Force HQ': item_force_hq,
+            'Input Bitrate': item_input_bitrate,  # Assuming this is how you want to handle it
+            'Rating': QStandardItem(str(video_info['rating'])),
+            'Duration': QStandardItem(video_info['duration_str'].split('.')[0]),
+            'Dimensions': QStandardItem(video_info['dimensions']),
+            'FPS': QStandardItem(str(video_info['fps'])),
+            'Codec': QStandardItem(video_info['video_codec']),
+            'Bit Rate': QStandardItem(str(video_info['video_bitrate'])),
+            'Size (MB)': QStandardItem(f"{video_info['size_mb']} MB"),
+            'New Codec': QStandardItem(export_settings['new_codec']),
+            'New Bit Rate': QStandardItem(str(export_settings['new_bitrate'])),
+            'Est. New Size': QStandardItem(str(f'{new_file_size} MB')),
+            'Compression %': QStandardItem(converted_file_data['compression_ratio']),
+            'Converted File Name': QStandardItem(converted_file_name),
+            'Renamed Old File Name': QStandardItem(renamed_old_file_name),
+            'Full File Path': QStandardItem(video)
+        }
+
+        # Create video_row_items list using the order in headers_mapping
+        video_row_items = [header_to_item[header] for header in self.headers_order]
+
         self.format_columns(video_row_items)
         
         return video_row_items
