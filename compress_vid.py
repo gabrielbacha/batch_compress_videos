@@ -271,7 +271,7 @@ def estimate_new_file_size(video_info, export_settings):
 
 def parse_videos(input_path):
     print("Parsing videos in folder...")
-    extensions = ['.mp4', '.mkv', '.avi', '.mov']
+    extensions = ['.mts', '.mp4', '.mkv', '.avi', '.mov']
     videos = []
     for root, dirs, files in os.walk(input_path):
         for f in files:
