@@ -1,4 +1,4 @@
-# VideoCompressor
+# Batch compress videos
 
 A simple Python application with a QT5 front-end designed to batch compress videos. It reduces the size of your video library efficiently.
 
@@ -15,7 +15,9 @@ pip install -r requirements.txt
 ## Usage
 
 Run the application with the following command:
-`python compress_vid.py`
+```
+python compress_vid.py
+```
 
 The GUI will guide you through the process of selecting and compressing your videos.
 
